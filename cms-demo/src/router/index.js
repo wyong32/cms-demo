@@ -226,7 +226,8 @@ router.beforeEach(async (to, from, next) => {
         console.log('✅ 用户信息获取成功')
       } catch (error) {
         console.error('❌ 获取用户信息失败:', error)
-        ElMessage.error('登录已过期，请重新登录')
+        // 不显示错误消息，避免在API不可用时显示过多错误
+        console.log('🔒 API不可用，跳转到登录页')
         next({ name: 'Login' })
         return
       }

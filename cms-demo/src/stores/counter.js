@@ -62,7 +62,12 @@ export const useAuthStore = defineStore('auth', () => {
       return response.data.user
     } catch (error) {
       console.error('获取用户信息失败:', error)
-      // 如果获取用户信息失败，可能是token过期，清除登录状态
+      // 如果是网络错误，不立即清除登录状态，让用户手动重试
+      if (error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED') {
+        console.log('🌐 网络错误，保持当前状态')
+        throw error
+      }
+      // 如果是认证错误，清除登录状态
       logout()
       throw error
     }
@@ -84,27 +89,31 @@ export const useAuthStore = defineStore('auth', () => {
           user.value = JSON.parse(savedUser)
           console.log('✅ 从本地存储恢复用户信息:', user.value?.username)
           
-          // 验证token是否仍然有效
-          try {
-            await getCurrentUser()
+          // 异步验证token，不阻塞应用启动
+          getCurrentUser().then(() => {
             console.log('✅ 令牌验证成功')
-          } catch (error) {
+          }).catch((error) => {
             console.error('❌ 令牌验证失败:', error)
-            logout()
-          }
+            // 只有在非网络错误时才清除登录状态
+            if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED') {
+              logout()
+            }
+          })
         } catch (error) {
           console.error('❌ 解析用户信息失败:', error)
           logout()
         }
       } else {
-        // 有token但没有用户信息，尝试获取
-        try {
-          await getCurrentUser()
+        // 有token但没有用户信息，异步尝试获取
+        getCurrentUser().then(() => {
           console.log('✅ 通过令牌获取用户信息成功')
-        } catch (error) {
+        }).catch((error) => {
           console.error('❌ 通过令牌获取用户信息失败:', error)
-          logout()
-        }
+          // 只有在非网络错误时才清除登录状态
+          if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED') {
+            logout()
+          }
+        })
       }
     } else {
       console.log('ℹ️  没有找到保存的令牌')
