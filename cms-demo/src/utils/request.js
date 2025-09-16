@@ -30,6 +30,8 @@ api.interceptors.request.use(
       console.log('📤 上传请求: 移除Content-Type让浏览器自动设置')
       console.log('📤 上传URL:', config.url)
       console.log('📤 请求方法:', config.method)
+      console.log('📤 请求头:', config.headers)
+      console.log('📤 请求数据:', config.data)
     }
     
     // 为AI生成接口设置更长的超时时间

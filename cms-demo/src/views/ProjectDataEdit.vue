@@ -138,7 +138,7 @@
                         :on-success="(response) => handleUploadSuccess(response, field.fieldName)"
                         :before-upload="beforeUpload"
                         :on-error="handleUploadError"
-                        action="/api/upload/image"
+                        :action="uploadAction"
                         :headers="uploadHeaders"
                         accept="image/*"
                         class="image-uploader"
@@ -367,6 +367,12 @@ const previewUrl = ref('')
 const uploadHeaders = computed(() => ({
   'Authorization': `Bearer ${authStore.token}`
 }))
+
+// 上传地址
+const uploadAction = computed(() => {
+  const baseURL = import.meta.env.VITE_API_URL || 'https://cms-demo-api.vercel.app/api'
+  return `${baseURL}/upload/image`
+})
 
 // 计算属性
 const isEdit = computed(() => !!route.params.id)

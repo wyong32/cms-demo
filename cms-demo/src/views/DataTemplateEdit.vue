@@ -105,7 +105,7 @@
                   :on-success="handleUploadSuccess"
                   :before-upload="beforeUpload"
                   :on-error="handleUploadError"
-                  action="/api/upload/image"
+                  :action="uploadAction"
                   :headers="uploadHeaders"
                   accept="image/*"
                   class="image-uploader"
@@ -242,6 +242,12 @@ const editorKey = ref(0) // 用于强制重新初始化RichTextEditor
 const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${localStorage.getItem('cms_token')}`
 }))
+
+// 上传地址
+const uploadAction = computed(() => {
+  const baseURL = import.meta.env.VITE_API_URL || 'https://cms-demo-api.vercel.app/api'
+  return `${baseURL}/upload/image`
+})
 
 // 计算属性
 const isEdit = computed(() => !!route.params.id)

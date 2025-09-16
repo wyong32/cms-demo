@@ -127,7 +127,7 @@
               :on-success="handleUploadSuccess"
               :before-upload="beforeUpload"
               :on-error="handleUploadError"
-              action="/api/upload/image"
+              :action="uploadAction"
               :headers="uploadHeaders"
               accept="image/*"
               class="image-uploader"
@@ -241,6 +241,12 @@ const generateType = computed(() => route.params.type || 'template')
 const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${localStorage.getItem('cms_token')}`
 }))
+
+// 上传地址
+const uploadAction = computed(() => {
+  const baseURL = import.meta.env.VITE_API_URL || 'https://cms-demo-api.vercel.app/api'
+  return `${baseURL}/upload/image`
+})
 
 // 表单数据
 const form = reactive({
