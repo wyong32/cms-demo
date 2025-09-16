@@ -1,0 +1,159 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 用户表
+model CMSUser {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  email     String?  @unique
+  role      Role     @default(USER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 关联关系
+  createdProjects    CMSProject[]     @relation("ProjectCreator")
+  createdTemplates   CMSDataTemplate[]
+  createdCategories  CMSCategory[]
+  projectDataEntries CMSProjectData[]
+  operationLogs      CMSOperationLog[]
+
+  @@map("cms_users")
+}
+
+// 角色枚举
+enum Role {
+  ADMIN
+  USER
+}
+
+// 分类表
+model CMSCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  type        String   // 分类类型，如"游戏", "应用"等
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String
+
+  // 关联关系
+  creator       CMSUser           @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  dataTemplates CMSDataTemplate[]
+  projectData   CMSProjectData[]
+
+  @@map("cms_categories")
+}
+
+// 数据模板表（4-1中用户创建的模板）
+model CMSDataTemplate {
+  id            String   @id @default(cuid())
+  title         String
+  categoryId    String
+  iframeUrl     String?
+  description   String?
+  tags          String[] // 存储为字符串数组
+  publishDate   DateTime @default(now())
+  imageUrl      String?
+  imageAlt      String?
+  seoTitle      String?
+  seoDescription String?
+  seoKeywords   String?
+  addressBar    String?
+  detailsHtml   String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdBy     String
+
+  // 关联关系
+  category CMSCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  creator  CMSUser     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("cms_data_templates")
+}
+
+// 项目表
+model CMSProject {
+  id          String                @id @default(cuid())
+  name        String                @unique
+  category    String?               // 项目分类
+  description String?
+  fields      CMSProjectField[]     // 项目自定义字段配置
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  createdBy   String
+
+  // 关联关系
+  creator     CMSUser          @relation("ProjectCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  projectData CMSProjectData[]
+
+  @@map("cms_projects")
+}
+
+// 项目字段配置（存储项目的自定义字段信息）
+model CMSProjectField {
+  id         String            @id @default(cuid())
+  projectId  String
+  fieldName  String            // 字段名称
+  fieldType  ProjectFieldType  // 字段类型：STRING, ARRAY
+  isRequired Boolean           @default(false) // 是否必填
+  order      Int               @default(0) // 显示顺序
+  createdAt  DateTime          @default(now())
+
+  // 关联关系
+  project CMSProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, fieldName])
+  @@map("cms_project_fields")
+}
+
+// 项目字段类型枚举
+enum ProjectFieldType {
+  STRING
+  ARRAY
+}
+
+// 项目数据表（用户在具体项目中添加的数据）
+model CMSProjectData {
+  id          String   @id @default(cuid())
+  projectId   String
+  categoryId  String?
+  data        Json     // 存储实际的数据内容，根据项目字段配置动态存储
+  isCompleted Boolean  @default(false) // 是否已完成
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String
+
+  // 关联关系
+  project  CMSProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category CMSCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  creator  CMSUser      @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("cms_project_data")
+}
+
+// 操作日志表
+model CMSOperationLog {
+  id          String    @id @default(cuid())
+  userId      String
+  action      String    // 操作类型：CREATE, UPDATE, DELETE
+  targetType  String    // 操作对象类型：PROJECT, TEMPLATE, CATEGORY, PROJECT_DATA
+  targetId    String    // 操作对象ID
+  description String    // 操作描述
+  createdAt   DateTime  @default(now())
+
+  // 关联关系
+  user CMSUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("cms_operation_logs")
+}
