@@ -27,7 +27,9 @@ const PORT = process.env.PORT || 3001;
 // 中间件配置
 app.use(helmet());
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? ['https://your-frontend-domain.com'] : ['http://localhost:5173', 'http://localhost:3000'],
+  origin: process.env.NODE_ENV === 'production' 
+    ? process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['https://cms-demo-self.vercel.app']
+    : ['http://localhost:5173', 'http://localhost:3000'],
   credentials: true
 }));
 

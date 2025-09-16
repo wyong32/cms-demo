@@ -34,5 +34,15 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  define: {
+    __VUE_OPTIONS_API__: true,
+    __VUE_PROD_DEVTOOLS__: false
+  },
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: false,
+    minify: 'esbuild'
   }
 })

@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "name": "cms-demo-self",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}
