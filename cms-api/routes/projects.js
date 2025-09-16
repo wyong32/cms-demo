@@ -332,6 +332,7 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
       });
     }
 
+    // 删除项目
     await prisma.cMSProject.delete({
       where: { id }
     });

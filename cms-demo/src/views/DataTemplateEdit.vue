@@ -245,7 +245,7 @@ const uploadHeaders = computed(() => ({
 
 // 上传地址
 const uploadAction = computed(() => {
-  const baseURL = import.meta.env.VITE_API_URL || 'https://cms-demo-api.vercel.app/api'
+  const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001/api' : 'https://cms-demo-api.vercel.app/api')
   return `${baseURL}/upload/image`
 })
 
@@ -383,10 +383,14 @@ const beforeUpload = (file) => {
 
 // 上传成功
 const handleUploadSuccess = (response) => {
+  console.log('📤 上传响应:', response)
+  
   if (response.success) {
     form.imageUrl = response.data.imageUrl
+    console.log('✅ 设置图片URL:', form.imageUrl)
     ElMessage.success('图片上传成功')
   } else {
+    console.error('❌ 上传失败:', response.error)
     ElMessage.error(response.error || '上传失败')
   }
 }
@@ -411,16 +415,25 @@ const handlePreviewIframe = () => {
 // 获取图片URL
 const getImageUrl = (url) => {
   if (!url) return ''
+  
+  console.log('🖼️ 处理图片URL:', url)
+  
   // 如果是完整URL（http或https开头），直接返回
   if (url.startsWith('http://') || url.startsWith('https://')) {
+    console.log('✅ 使用完整URL:', url)
     return url
   }
+  
   // 如果是相对路径（以/api/开头），由于前端代理配置，直接返回
   if (url.startsWith('/api/')) {
+    console.log('✅ 使用API路径:', url)
     return url
   }
+  
   // 其他情况，假设是文件名，添加前缀
-  return `/api/uploads/${url}`
+  const finalUrl = `/api/uploads/${url}`
+  console.log('✅ 使用上传路径:', finalUrl)
+  return finalUrl
 }
 
 // 保存

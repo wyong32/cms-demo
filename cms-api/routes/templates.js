@@ -308,7 +308,8 @@ router.delete('/:id', authenticateToken, requireUser, async (req, res) => {
       where: { id },
       select: {
         id: true,
-        title: true
+        title: true,
+        imageUrl: true
       }
     });
 
@@ -316,6 +317,7 @@ router.delete('/:id', authenticateToken, requireUser, async (req, res) => {
       return res.status(404).json({ error: '数据模板不存在' });
     }
 
+    // 删除数据模板
     await prisma.cMSDataTemplate.delete({
       where: { id }
     });

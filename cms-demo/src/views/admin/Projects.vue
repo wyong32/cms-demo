@@ -101,77 +101,78 @@
       :title="isEdit ? '编辑项目' : '创建项目'"
       width="800px"
       class="project-dialog"
-      v-loading="dialogLoading"
     >
-      <el-form
-        ref="formRef"
-        :model="form"
-        :rules="rules"
-        label-width="100px"
-      >
-        <el-form-item label="项目名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入项目名称" />
-        </el-form-item>
-        <el-form-item label="项目分类" prop="category">
-          <el-input v-model="form.category" placeholder="请输入项目分类（可选）" />
-        </el-form-item>
-        <el-form-item label="项目描述" prop="description">
-          <el-input
-            v-model="form.description"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入项目描述（可选）"
-          />
-        </el-form-item>
-        <el-form-item label="自定义字段">
-          <div class="custom-fields">
-            <div class="fields-header">
-              <span>自定义字段配置（系统已内置默认字段）</span>
-              <el-button type="primary" size="small" @click="addField">
-                <el-icon><Plus /></el-icon>
-                添加字段
-              </el-button>
+      <div v-loading="dialogLoading">
+        <el-form
+          ref="formRef"
+          :model="form"
+          :rules="rules"
+          label-width="100px"
+        >
+          <el-form-item label="项目名称" prop="name">
+            <el-input v-model="form.name" placeholder="请输入项目名称" />
+          </el-form-item>
+          <el-form-item label="项目分类" prop="category">
+            <el-input v-model="form.category" placeholder="请输入项目分类（可选）" />
+          </el-form-item>
+          <el-form-item label="项目描述" prop="description">
+            <el-input
+              v-model="form.description"
+              type="textarea"
+              :rows="3"
+              placeholder="请输入项目描述（可选）"
+            />
+          </el-form-item>
+          <el-form-item label="自定义字段">
+            <div class="custom-fields">
+              <div class="fields-header">
+                <span>自定义字段配置（系统已内置默认字段）</span>
+                <el-button type="primary" size="small" @click="addField">
+                  <el-icon><Plus /></el-icon>
+                  添加字段
+                </el-button>
+              </div>
+              <div v-if="form.fields.length === 0" class="no-fields">
+                暂无自定义字段
+              </div>
+              <div 
+                v-for="(field, index) in form.fields" 
+                :key="index"
+                class="field-item"
+              >
+                <el-row :gutter="12">
+                  <el-col :span="8">
+                    <el-input
+                      v-model="field.fieldName"
+                      placeholder="字段名称"
+                      :class="{ 'is-error': !field.fieldName }"
+                    />
+                  </el-col>
+                  <el-col :span="6">
+                    <el-select v-model="field.fieldType" placeholder="字段类型">
+                      <el-option label="字符串" value="STRING" />
+                      <el-option label="数组" value="ARRAY" />
+                    </el-select>
+                  </el-col>
+                  <el-col :span="6">
+                    <el-checkbox v-model="field.isRequired">必填</el-checkbox>
+                  </el-col>
+                  <el-col :span="4">
+                    <el-button 
+                      type="danger" 
+                      size="small" 
+                      @click="removeField(index)"
+                      class="remove-btn"
+                    >
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </el-col>
+                </el-row>
+              </div>
             </div>
-            <div v-if="form.fields.length === 0" class="no-fields">
-              暂无自定义字段
-            </div>
-            <div 
-              v-for="(field, index) in form.fields" 
-              :key="index"
-              class="field-item"
-            >
-              <el-row :gutter="12">
-                <el-col :span="8">
-                  <el-input
-                    v-model="field.fieldName"
-                    placeholder="字段名称"
-                    :class="{ 'is-error': !field.fieldName }"
-                  />
-                </el-col>
-                <el-col :span="6">
-                  <el-select v-model="field.fieldType" placeholder="字段类型">
-                    <el-option label="字符串" value="STRING" />
-                    <el-option label="数组" value="ARRAY" />
-                  </el-select>
-                </el-col>
-                <el-col :span="6">
-                  <el-checkbox v-model="field.isRequired">必填</el-checkbox>
-                </el-col>
-                <el-col :span="4">
-                  <el-button 
-                    type="danger" 
-                    size="small" 
-                    @click="removeField(index)"
-                    class="remove-btn"
-                  >
-                    <el-icon><Delete /></el-icon>
-                  </el-button>
-                </el-col>
-              </el-row>
-            </div>
-          </div>
-        </el-form-item>
-      </el-form>
+          </el-form-item>
+        </el-form>
+      </div>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="handleSave">

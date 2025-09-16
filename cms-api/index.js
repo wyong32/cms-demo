@@ -27,6 +27,8 @@ console.log('🔧 环境检查:');
 console.log('- NODE_ENV:', process.env.NODE_ENV);
 console.log('- DATABASE_URL:', process.env.DATABASE_URL ? '已设置' : '未设置');
 console.log('- JWT_SECRET:', process.env.JWT_SECRET ? '已设置' : '未设置');
+console.log('- PORT:', process.env.PORT || 3001);
+console.log('- CORS_ORIGIN:', process.env.CORS_ORIGIN || '默认配置');
 
 // 延迟创建 Prisma 客户端，避免启动时错误
 let prisma;
@@ -42,12 +44,30 @@ const PORT = process.env.PORT || 3001;
 
 // 中间件配置
 app.use(helmet());
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['https://cms-demo-self.vercel.app']
-    : ['http://localhost:5173', 'http://localhost:3000'],
-  credentials: true
-}));
+// CORS配置
+const corsOptions = {
+  origin: function (origin, callback) {
+    // 允许的源列表
+    const allowedOrigins = process.env.NODE_ENV === 'production' 
+      ? (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['https://cms-demo-self.vercel.app'])
+      : ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000'];
+    
+    // 允许没有origin的请求（如移动应用）
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('🚫 CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
+app.use(cors(corsOptions));
 
 // 速率限制
 const limiter = rateLimit({

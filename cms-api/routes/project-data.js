@@ -555,6 +555,7 @@ router.delete('/:id', authenticateToken, requireUser, async (req, res) => {
       return res.status(404).json({ error: '项目数据不存在' });
     }
 
+    // 删除项目数据
     await prisma.cMSProjectData.delete({
       where: { id }
     });

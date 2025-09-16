@@ -102,6 +102,12 @@
               <template #title>操作</template>
             </el-menu-item>
             
+            <!-- 图片管理 -->
+            <el-menu-item index="/images">
+              <el-icon><Picture /></el-icon>
+              <template #title>图片管理</template>
+            </el-menu-item>
+            
             <!-- 管理员功能 -->
             <el-sub-menu v-if="authStore.isAdmin" index="admin">
               <template #title>
@@ -157,6 +163,20 @@ import { useAuthStore } from '../stores/counter'
 import { useAppStore } from '../stores/app'
 import { projectAPI } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { 
+  Fold, 
+  Expand, 
+  User, 
+  ArrowDown, 
+  List, 
+  FolderOpened, 
+  Folder, 
+  Document, 
+  Operation, 
+  Setting, 
+  UserFilled,
+  Picture
+} from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()

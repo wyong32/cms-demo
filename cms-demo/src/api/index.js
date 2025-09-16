@@ -174,7 +174,19 @@ export const uploadAPI = {
   },
   
   // 删除图片
-  deleteImage: (filename) => api.delete(`/upload/image/${filename}`)
+  deleteImage: (publicId) => api.delete(`/upload/image/${publicId}`),
+  
+  // 获取图片列表
+  getImages: (params) => api.get('/upload/images', { params }),
+  
+  // 获取图片信息
+  getImageInfo: (publicId) => api.get(`/upload/image/${publicId}/info`),
+  
+  // 获取图片变换URL
+  getImageTransform: (publicId, params) => api.get(`/upload/image/${publicId}/transform`, { params }),
+  
+  // 获取所有已使用的图片（按类型分类）
+  getUsedImages: () => api.get('/upload/images/used')
 }
 
 export default {

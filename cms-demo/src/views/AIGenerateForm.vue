@@ -244,7 +244,7 @@ const uploadHeaders = computed(() => ({
 
 // 上传地址
 const uploadAction = computed(() => {
-  const baseURL = import.meta.env.VITE_API_URL || 'https://cms-demo-api.vercel.app/api'
+  const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001/api' : 'https://cms-demo-api.vercel.app/api')
   return `${baseURL}/upload/image`
 })
 

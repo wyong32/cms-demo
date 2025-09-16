@@ -152,6 +152,15 @@ const routes = [
           icon: 'Document'
         }
       },
+      {
+        path: 'images',
+        name: 'ImageManager',
+        component: () => import('../views/ImageManager.vue'),
+        meta: {
+          title: '图片管理',
+          icon: 'Picture'
+        }
+      },
       // 管理员功能
       {
         path: 'admin',

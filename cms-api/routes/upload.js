@@ -199,4 +199,253 @@ router.get('/image/:publicId/transform', authenticateToken, (req, res) => {
   }
 });
 
+// 获取所有已使用的图片（按类型分类）
+router.get('/images/used', authenticateToken, async (req, res) => {
+  try {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+    
+    // 获取模板中的图片
+    const templates = await prisma.cMSDataTemplate.findMany({
+      where: {
+        imageUrl: { not: null }
+      },
+      select: {
+        id: true,
+        title: true,
+        imageUrl: true,
+        imageAlt: true,
+        category: {
+          select: {
+            name: true,
+            type: true
+          }
+        },
+        createdAt: true
+      }
+    });
+    
+    // 获取项目数据中的图片
+    const projectData = await prisma.cMSProjectData.findMany({
+      where: {
+        data: {
+          path: ['imageUrl'],
+          not: null
+        }
+      },
+      include: {
+        project: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        category: {
+          select: {
+            name: true,
+            type: true
+          }
+        }
+      }
+    });
+    
+    // 处理模板图片
+    const templateImages = templates.map(template => ({
+      id: template.id,
+      type: 'template',
+      title: template.title,
+      imageUrl: template.imageUrl,
+      imageAlt: template.imageAlt,
+      categoryName: template.category?.name || '未分类',
+      categoryType: template.category?.type || '其他',
+      projectName: null,
+      createdAt: template.createdAt,
+      source: '数据模板'
+    }));
+    
+    // 处理项目数据图片
+    const projectImages = [];
+    projectData.forEach(data => {
+      const imageUrl = data.data.imageUrl;
+      if (imageUrl) {
+        projectImages.push({
+          id: data.id,
+          type: 'project',
+          title: data.data.title || '未命名',
+          imageUrl: imageUrl,
+          imageAlt: data.data.imageAlt || '',
+          categoryName: data.category?.name || '未分类',
+          categoryType: data.category?.type || '其他',
+          projectName: data.project?.name || '未知项目',
+          createdAt: data.createdAt,
+          source: `项目: ${data.project?.name || '未知项目'}`
+        });
+      }
+    });
+    
+    // 合并所有图片
+    const allImages = [...templateImages, ...projectImages];
+    
+    // 按创建时间排序
+    allImages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    // 统计信息
+    const stats = {
+      total: allImages.length,
+      templates: templateImages.length,
+      projects: projectImages.length,
+      byCategory: {},
+      byProject: {}
+    };
+    
+    // 按分类统计
+    allImages.forEach(image => {
+      if (!stats.byCategory[image.categoryName]) {
+        stats.byCategory[image.categoryName] = 0;
+      }
+      stats.byCategory[image.categoryName]++;
+      
+      if (image.type === 'project' && image.projectName) {
+        if (!stats.byProject[image.projectName]) {
+          stats.byProject[image.projectName] = 0;
+        }
+        stats.byProject[image.projectName]++;
+      }
+    });
+    
+    await prisma.$disconnect();
+    
+    res.json({
+      success: true,
+      data: {
+        images: allImages,
+        stats
+      }
+    });
+    
+  } catch (error) {
+    console.error('获取已使用图片失败:', error);
+    res.status(500).json({ 
+      success: false,
+      error: '获取已使用图片失败' 
+    });
+  }
+});
+
+// 获取用户上传的图片列表（Cloudinary）
+router.get('/images', authenticateToken, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, folder = 'cms-uploads' } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // 检查是否配置了Cloudinary
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      return res.json({
+        success: true,
+        data: {
+          images: [],
+          total: 0,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          message: 'Cloudinary未配置，无法获取图片列表'
+        }
+      });
+    }
+    
+    const { v2: cloudinary } = await import('cloudinary');
+    
+    // 配置Cloudinary
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET
+    });
+    
+    // 获取图片列表
+    const result = await cloudinary.api.resources({
+      type: 'upload',
+      prefix: folder,
+      max_results: parseInt(limit),
+      next_cursor: skip > 0 ? `cursor_${skip}` : undefined
+    });
+    
+    const images = result.resources.map(resource => ({
+      publicId: resource.public_id,
+      url: resource.secure_url,
+      width: resource.width,
+      height: resource.height,
+      format: resource.format,
+      size: resource.bytes,
+      createdAt: resource.created_at,
+      folder: resource.folder
+    }));
+    
+    res.json({
+      success: true,
+      data: {
+        images,
+        total: result.total_count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        nextCursor: result.next_cursor
+      }
+    });
+  } catch (error) {
+    console.error('获取图片列表失败:', error);
+    res.status(500).json({
+      success: false,
+      error: '获取图片列表失败'
+    });
+  }
+});
+
+// 获取图片详细信息
+router.get('/image/:publicId/info', authenticateToken, async (req, res) => {
+  try {
+    const { publicId } = req.params;
+    
+    // 检查是否配置了Cloudinary
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cloudinary未配置'
+      });
+    }
+    
+    const { v2: cloudinary } = await import('cloudinary');
+    
+    // 配置Cloudinary
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET
+    });
+    
+    // 获取图片信息
+    const result = await cloudinary.api.resource(publicId);
+    
+    res.json({
+      success: true,
+      data: {
+        publicId: result.public_id,
+        url: result.secure_url,
+        width: result.width,
+        height: result.height,
+        format: result.format,
+        size: result.bytes,
+        createdAt: result.created_at,
+        folder: result.folder,
+        tags: result.tags || [],
+        context: result.context || {}
+      }
+    });
+  } catch (error) {
+    console.error('获取图片信息失败:', error);
+    res.status(500).json({
+      success: false,
+      error: '获取图片信息失败'
+    });
+  }
+});
+
 export default router;

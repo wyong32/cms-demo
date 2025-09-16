@@ -43,5 +43,5 @@ authStore.initializeAuth()
 
 // 添加调试信息
 console.log('🚀 CMS应用已启动')
-console.log('📡 API地址:', import.meta.env.VITE_API_URL || 'https://cms-demo-api.vercel.app/api')
+console.log('📡 API地址:', import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001/api' : 'https://cms-demo-api.vercel.app/api'))
 console.log('🌍 环境:', import.meta.env.MODE)
