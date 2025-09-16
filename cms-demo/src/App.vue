@@ -1,28 +1,13 @@
 <template>
   <div id="app">
-    <div v-if="showDebug" style="position: fixed; top: 10px; right: 10px; background: #f0f0f0; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 9999;">
-      <div>App mounted: {{ appMounted }}</div>
-      <div>Router ready: {{ routerReady }}</div>
-      <div>Current route: {{ $route.name }}</div>
-    </div>
+    <h1>CMS 系统测试</h1>
+    <p>如果你能看到这个页面，说明Vue应用已经正常启动</p>
     <router-view />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
-
-const appMounted = ref(false)
-const routerReady = ref(false)
-const showDebug = ref(true)
-const $route = useRoute()
-
-onMounted(() => {
-  appMounted.value = true
-  routerReady.value = true
-  console.log('🚀 App mounted successfully')
-})
+console.log('🚀 App.vue loaded')
 </script>
 
 <style>

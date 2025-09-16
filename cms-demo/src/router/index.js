@@ -5,6 +5,15 @@ import { ElMessage } from 'element-plus'
 // 路由配置
 const routes = [
   {
+    path: '/test',
+    name: 'Test',
+    component: () => import('@/views/Test.vue'),
+    meta: {
+      title: '测试页面',
+      requiresAuth: false
+    }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/Login.vue'),
@@ -15,7 +24,7 @@ const routes = [
   },
   {
     path: '/',
-    redirect: '/dashboard',
+    redirect: '/test',
     component: () => import('@/layout/index.vue'),
     meta: {
       requiresAuth: true
@@ -199,40 +208,9 @@ const router = createRouter({
   routes
 })
 
-// 路由守卫
+// 简化的路由守卫
 router.beforeEach((to, from, next) => {
-  const authStore = useAuthStore()
-  
-  // 设置页面标题
-  if (to.meta.title) {
-    document.title = `${to.meta.title} - CMS 后台管理系统`
-  }
-  
-  // 检查是否需要认证
-  if (to.meta.requiresAuth !== false) {
-    // 简单检查是否有token
-    if (!authStore.token) {
-      console.log('🔒 没有令牌，跳转到登录页')
-      next({ name: 'Login' })
-      return
-    }
-    
-    // 检查是否需要管理员权限
-    if (to.meta.requiresAdmin && !authStore.isAdmin) {
-      console.log('🚫 需要管理员权限')
-      next({ name: 'Dashboard' })
-      return
-    }
-  }
-  
-  // 如果已登录用户访问登录页，重定向到首页
-  if (to.name === 'Login' && authStore.isLoggedIn) {
-    console.log('✅ 已登录用户访问登录页，重定向到首页')
-    next({ name: 'Dashboard' })
-    return
-  }
-  
-  console.log('✅ 路由守卫检查通过，允许访问:', to.name)
+  console.log('🔄 路由跳转:', to.name)
   next()
 })
 

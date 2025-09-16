@@ -1,6 +1,5 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import { authAPI } from '@/api'
 import { ElMessage } from 'element-plus'
 
 // 用户认证状态管理
@@ -16,7 +15,7 @@ export const useAuthStore = defineStore('auth', () => {
   const username = computed(() => user.value?.username || '')
 
   // 动作
-  const login = async (credentials) => {
+  const login = async (credentials, authAPI) => {
     try {
       isLoading.value = true
       const response = await authAPI.login(credentials)
@@ -49,7 +48,7 @@ export const useAuthStore = defineStore('auth', () => {
     ElMessage.success('已退出登录')
   }
 
-  const getCurrentUser = async () => {
+  const getCurrentUser = async (authAPI) => {
     try {
       if (!token.value) return null
       
