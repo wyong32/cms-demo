@@ -4,7 +4,7 @@ import { useAuthStore } from '../stores/counter.js'
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: 'https://cms-demo-api.vercel.app/api',
+  baseURL: import.meta.env.VITE_API_URL || 'https://cms-demo-api.vercel.app/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
