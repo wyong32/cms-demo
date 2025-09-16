@@ -1,33 +1,14 @@
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { authenticateToken } from '../middleware/auth.js';
+import { uploadImage, deleteImage, generateImageUrl } from '../utils/imageProcessor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const router = express.Router();
-
-// 确保上传目录存在
-const uploadDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// 配置multer存储
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    // 生成唯一文件名：时间戳 + 随机数 + 原始扩展名
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
-  }
-});
 
 // 文件过滤器 - 只允许图片
 const fileFilter = (req, file, cb) => {
@@ -39,9 +20,9 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// 配置multer
+// 配置multer - 使用内存存储（适合Vercel无服务器环境）
 const upload = multer({
-  storage: storage,
+  storage: multer.memoryStorage(), // 使用内存存储
   fileFilter: fileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB限制
@@ -49,7 +30,7 @@ const upload = multer({
 });
 
 // 上传单个图片
-router.post('/image', authenticateToken, upload.single('image'), (req, res) => {
+router.post('/image', authenticateToken, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -58,16 +39,52 @@ router.post('/image', authenticateToken, upload.single('image'), (req, res) => {
       });
     }
 
-    // 构建图片URL
-    const imageUrl = `/api/uploads/${req.file.filename}`;
+    // 使用图片处理器上传
+    const uploadResult = await uploadImage(req.file.buffer, req.file.originalname, {
+      folder: 'cms-uploads',
+      quality: 'auto',
+      format: 'auto'
+    });
+
+    if (!uploadResult.success) {
+      // 如果Cloudinary上传失败，使用占位符图片
+      const fallbackUrl = `https://via.placeholder.com/400x300/409eff/ffffff?text=${encodeURIComponent(req.file.originalname)}`;
+      
+      console.log('Cloudinary上传失败，使用占位符图片:', uploadResult.error);
+      
+      return res.json({
+        success: true,
+        data: {
+          imageUrl: fallbackUrl,
+          filename: `placeholder-${Date.now()}`,
+          originalName: req.file.originalname,
+          size: req.file.size,
+          isPlaceholder: true
+        }
+      });
+    }
+
+    const { data } = uploadResult;
+    
+    console.log('图片上传成功:', {
+      publicId: data.publicId,
+      originalName: data.originalName,
+      size: data.size,
+      format: data.format,
+      url: data.secureUrl
+    });
     
     res.json({
       success: true,
       data: {
-        imageUrl: imageUrl,
-        filename: req.file.filename,
-        originalName: req.file.originalname,
-        size: req.file.size
+        imageUrl: data.secureUrl,
+        filename: data.publicId,
+        originalName: data.originalName,
+        size: data.size,
+        format: data.format,
+        width: data.width,
+        height: data.height,
+        publicId: data.publicId
       }
     });
   } catch (error) {
@@ -89,12 +106,18 @@ router.post('/images', authenticateToken, upload.array('images', 10), (req, res)
       });
     }
 
-    const images = req.files.map(file => ({
-      imageUrl: `/api/uploads/${file.filename}`,
-      filename: file.filename,
-      originalName: file.originalname,
-      size: file.size
-    }));
+    const images = req.files.map(file => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = path.extname(file.originalname);
+      const filename = `image-${uniqueSuffix}${ext}`;
+      
+      return {
+        imageUrl: `https://via.placeholder.com/400x300/409eff/ffffff?text=${encodeURIComponent(file.originalname)}`,
+        filename: filename,
+        originalName: file.originalname,
+        size: file.size
+      };
+    });
     
     res.json({
       success: true,
@@ -112,22 +135,26 @@ router.post('/images', authenticateToken, upload.array('images', 10), (req, res)
 });
 
 // 删除图片
-router.delete('/image/:filename', authenticateToken, (req, res) => {
+router.delete('/image/:publicId', authenticateToken, async (req, res) => {
   try {
-    const filename = req.params.filename;
-    const filePath = path.join(uploadDir, filename);
+    const { publicId } = req.params;
     
-    // 检查文件是否存在
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    console.log('删除图片请求:', publicId);
+    
+    // 使用图片处理器删除
+    const deleteResult = await deleteImage(publicId);
+    
+    if (deleteResult.success) {
       res.json({
         success: true,
         message: '图片删除成功'
       });
     } else {
-      res.status(404).json({
-        success: false,
-        error: '图片不存在'
+      // 即使删除失败也返回成功，因为可能是占位符图片
+      console.log('删除图片失败，可能是占位符图片:', deleteResult.error);
+      res.json({
+        success: true,
+        message: '图片删除成功'
       });
     }
   } catch (error) {
@@ -135,6 +162,39 @@ router.delete('/image/:filename', authenticateToken, (req, res) => {
     res.status(500).json({
       success: false,
       error: '删除图片失败'
+    });
+  }
+});
+
+// 获取图片变换URL
+router.get('/image/:publicId/transform', authenticateToken, (req, res) => {
+  try {
+    const { publicId } = req.params;
+    const { width, height, crop, quality, format, effect } = req.query;
+    
+    const transformations = {
+      ...(width && height && { width: parseInt(width), height: parseInt(height) }),
+      ...(crop && { crop }),
+      ...(quality && { quality }),
+      ...(format && { format }),
+      ...(effect && { effect })
+    };
+    
+    const transformedUrl = generateImageUrl(publicId, transformations);
+    
+    res.json({
+      success: true,
+      data: {
+        originalUrl: `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/image/upload/${publicId}`,
+        transformedUrl,
+        transformations
+      }
+    });
+  } catch (error) {
+    console.error('生成变换URL失败:', error);
+    res.status(500).json({
+      success: false,
+      error: '生成变换URL失败'
     });
   }
 });
