@@ -31,10 +31,6 @@ app.use(router)
 // 挂载应用
 app.mount('#app')
 
-// 初始化认证状态（异步，不阻塞应用启动）
+// 初始化认证状态
 const authStore = useAuthStore()
-authStore.initializeAuth().then(() => {
-  console.log('🚀 认证初始化完成')
-}).catch((error) => {
-  console.error('❌ 认证初始化失败:', error)
-})
+authStore.initializeAuth()

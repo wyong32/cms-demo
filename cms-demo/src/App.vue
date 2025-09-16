@@ -1,23 +1,27 @@
 <template>
   <div id="app">
-    <div v-if="isLoading" class="loading-container">
-      <div class="loading-spinner"></div>
-      <p>正在加载...</p>
+    <div v-if="showDebug" style="position: fixed; top: 10px; right: 10px; background: #f0f0f0; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 9999;">
+      <div>App mounted: {{ appMounted }}</div>
+      <div>Router ready: {{ routerReady }}</div>
+      <div>Current route: {{ $route.name }}</div>
     </div>
-    <router-view v-else />
+    <router-view />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 
-const isLoading = ref(true)
+const appMounted = ref(false)
+const routerReady = ref(false)
+const showDebug = ref(true)
+const $route = useRoute()
 
 onMounted(() => {
-  // 模拟应用初始化时间
-  setTimeout(() => {
-    isLoading.value = false
-  }, 1000)
+  appMounted.value = true
+  routerReady.value = true
+  console.log('🚀 App mounted successfully')
 })
 </script>
 
@@ -145,33 +149,4 @@ body {
   padding: 32px;
 }
 
-/* 加载状态样式 */
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  background-color: #f0f2f5;
-}
-
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #e1e5e9;
-  border-top: 4px solid #409eff;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 16px;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.loading-container p {
-  color: #606266;
-  font-size: 14px;
-}
 </style>

@@ -200,7 +200,7 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach(async (to, from, next) => {
+router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
   
   // 设置页面标题
@@ -210,33 +210,9 @@ router.beforeEach(async (to, from, next) => {
   
   // 检查是否需要认证
   if (to.meta.requiresAuth !== false) {
-    // 检查是否有token
+    // 简单检查是否有token
     if (!authStore.token) {
       console.log('🔒 没有令牌，跳转到登录页')
-      ElMessage.warning('请先登录')
-      next({ name: 'Login' })
-      return
-    }
-    
-    // 检查用户信息是否存在，如果不存在则尝试获取
-    if (!authStore.user) {
-      try {
-        console.log('🔄 获取用户信息...')
-        await authStore.getCurrentUser()
-        console.log('✅ 用户信息获取成功')
-      } catch (error) {
-        console.error('❌ 获取用户信息失败:', error)
-        // 不显示错误消息，避免在API不可用时显示过多错误
-        console.log('🔒 API不可用，跳转到登录页')
-        next({ name: 'Login' })
-        return
-      }
-    }
-    
-    // 验证登录状态
-    if (!authStore.isLoggedIn) {
-      console.log('🔒 登录状态无效，跳转到登录页')
-      ElMessage.warning('登录状态无效，请重新登录')
       next({ name: 'Login' })
       return
     }
@@ -244,7 +220,6 @@ router.beforeEach(async (to, from, next) => {
     // 检查是否需要管理员权限
     if (to.meta.requiresAdmin && !authStore.isAdmin) {
       console.log('🚫 需要管理员权限')
-      ElMessage.error('需要管理员权限')
       next({ name: 'Dashboard' })
       return
     }

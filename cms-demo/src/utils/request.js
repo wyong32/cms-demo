@@ -4,15 +4,12 @@ import { useAuthStore } from '@/stores/counter'
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://cms-demo-api.vercel.app/api',
+  baseURL: 'https://cms-demo-api.vercel.app/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
   }
 })
-
-// 调试环境变量
-console.log('🔧 API Base URL:', import.meta.env.VITE_API_BASE_URL || 'https://cms-demo-api.vercel.app/api')
 
 // 请求拦截器
 api.interceptors.request.use(
