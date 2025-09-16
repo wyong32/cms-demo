@@ -1,13 +1,11 @@
 <template>
   <div id="app">
-    <h1>CMS 系统测试</h1>
-    <p>如果你能看到这个页面，说明Vue应用已经正常启动</p>
     <router-view />
   </div>
 </template>
 
 <script setup>
-console.log('🚀 App.vue loaded')
+// 全局样式和应用初始化
 </script>
 
 <style>

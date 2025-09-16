@@ -347,9 +347,9 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Plus } from '@element-plus/icons-vue'
-import { projectDataAPI, projectAPI, templateAPI } from '@/api'
-import { useAuthStore } from '@/stores/counter'
-import RichTextEditor from '@/components/RichTextEditor.vue'
+import { projectDataAPI, projectAPI, templateAPI } from '../api'
+import { useAuthStore } from '../stores/counter'
+import RichTextEditor from '../components/RichTextEditor.vue'
 
 const router = useRouter()
 const route = useRoute()

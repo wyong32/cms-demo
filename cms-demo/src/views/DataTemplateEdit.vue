@@ -223,8 +223,8 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Plus } from '@element-plus/icons-vue'
-import { dataTemplateAPI, categoryAPI, uploadAPI } from '@/api'
-import RichTextEditor from '@/components/RichTextEditor.vue'
+import { dataTemplateAPI, categoryAPI, uploadAPI } from '../api'
+import RichTextEditor from '../components/RichTextEditor.vue'
 
 const router = useRouter()
 const route = useRoute()

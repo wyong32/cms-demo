@@ -153,9 +153,9 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/counter'
-import { useAppStore } from '@/stores/app'
-import { projectAPI } from '@/api'
+import { useAuthStore } from '../stores/counter'
+import { useAppStore } from '../stores/app'
+import { projectAPI } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()

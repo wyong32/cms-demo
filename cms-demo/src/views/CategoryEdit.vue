@@ -84,7 +84,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import { categoryAPI, dataTemplateAPI } from '@/api'
+import { categoryAPI, dataTemplateAPI } from '../api'
 import dayjs from 'dayjs'
 
 const router = useRouter()

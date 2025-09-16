@@ -94,7 +94,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { categoryAPI } from '@/api'
+import { categoryAPI } from '../api'
 import dayjs from 'dayjs'
 
 const router = useRouter()

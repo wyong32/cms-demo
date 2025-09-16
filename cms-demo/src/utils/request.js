@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { useAuthStore } from '@/stores/counter'
+import { useAuthStore } from '../stores/counter.js'
 
 // 创建axios实例
 const api = axios.create({

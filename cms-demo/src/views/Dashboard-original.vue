@@ -192,8 +192,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useAuthStore } from '@/stores/counter'
-import { logAPI, statsAPI } from '@/api'
+import { useAuthStore } from '../stores/counter'
+import { logAPI, statsAPI } from '../api'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/zh-cn'

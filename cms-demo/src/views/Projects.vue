@@ -93,7 +93,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Calendar } from '@element-plus/icons-vue'
-import { projectAPI } from '@/api'
+import { projectAPI } from '../api'
 import dayjs from 'dayjs'
 
 const router = useRouter()

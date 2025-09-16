@@ -221,7 +221,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Plus, MagicStick, Folder, Close } from '@element-plus/icons-vue'
-import { dataTemplateAPI, categoryAPI, projectAPI, uploadAPI, aiAPI } from '@/api'
+import { dataTemplateAPI, categoryAPI, projectAPI, uploadAPI, aiAPI } from '../api'
 
 const router = useRouter()
 const route = useRoute()

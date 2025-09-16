@@ -1,4 +1,4 @@
-import api from '@/utils/request'
+import api from '../utils/request.js'
 
 // 认证相关API
 export const authAPI = {

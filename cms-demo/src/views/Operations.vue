@@ -263,7 +263,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { projectDataAPI, projectAPI, categoryAPI } from '@/api'
+import { projectDataAPI, projectAPI, categoryAPI } from '../api'
 import dayjs from 'dayjs'
 
 const loading = ref(false)

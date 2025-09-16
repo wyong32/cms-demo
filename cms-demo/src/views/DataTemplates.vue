@@ -114,7 +114,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, MagicStick } from '@element-plus/icons-vue'
-import { dataTemplateAPI, categoryAPI } from '@/api'
+import { dataTemplateAPI, categoryAPI } from '../api'
 import dayjs from 'dayjs'
 
 const router = useRouter()

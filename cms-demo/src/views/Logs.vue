@@ -286,8 +286,8 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { logAPI } from '@/api'
-import { useAuthStore } from '@/stores/counter'
+import { logAPI } from '../api'
+import { useAuthStore } from '../stores/counter'
 import dayjs from 'dayjs'
 
 const authStore = useAuthStore()
