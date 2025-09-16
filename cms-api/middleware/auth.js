@@ -1,5 +1,7 @@
 import { verifyToken } from '../utils/auth.js';
-import { prisma } from '../index.js';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 // JWT认证中间件
 export const authenticateToken = async (req, res, next) => {

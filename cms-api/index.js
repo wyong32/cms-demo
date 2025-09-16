@@ -21,7 +21,23 @@ dotenv.config();
 
 // 创建Express应用
 const app = express();
-const prisma = new PrismaClient();
+
+// 检查环境变量
+console.log('🔧 环境检查:');
+console.log('- NODE_ENV:', process.env.NODE_ENV);
+console.log('- DATABASE_URL:', process.env.DATABASE_URL ? '已设置' : '未设置');
+console.log('- JWT_SECRET:', process.env.JWT_SECRET ? '已设置' : '未设置');
+
+// 延迟创建 Prisma 客户端，避免启动时错误
+let prisma;
+try {
+  prisma = new PrismaClient();
+  console.log('✅ Prisma 客户端创建成功');
+} catch (error) {
+  console.error('❌ Prisma 客户端创建失败:', error);
+  prisma = null;
+}
+
 const PORT = process.env.PORT || 3001;
 
 // 中间件配置
@@ -50,7 +66,21 @@ app.use('/api/uploads', express.static('uploads'));
 
 // 健康检查端点
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    database: process.env.DATABASE_URL ? 'Connected' : 'Not configured'
+  });
+});
+
+// 简单的测试端点
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    message: 'CMS API服务运行正常！', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
 });
 
 // API路由
@@ -64,9 +94,6 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/stats', statsRoutes);
 
-app.get('/api/test', (req, res) => {
-  res.json({ message: 'CMS API服务运行正常！', timestamp: new Date().toISOString() });
-});
 
 // 404处理
 app.use((req, res) => {
@@ -86,19 +113,25 @@ app.listen(PORT, () => {
   console.log(`🚀 CMS API服务已启动在端口 ${PORT}`);
   console.log(`💻 本地访问地址: http://localhost:${PORT}`);
   console.log(`🔍 API测试地址: http://localhost:${PORT}/api/test`);
+  console.log(`🌍 环境: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🗄️ 数据库URL: ${process.env.DATABASE_URL ? '已配置' : '未配置'}`);
 });
 
 // 优雅关闭
 process.on('SIGINT', async () => {
   console.log('正在关闭服务器...');
-  await prisma.$disconnect();
+  if (prisma) {
+    await prisma.$disconnect();
+  }
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.log('正在关闭服务器...');
-  await prisma.$disconnect();
+  if (prisma) {
+    await prisma.$disconnect();
+  }
   process.exit(0);
 });
 
-export { prisma };
+// 注意：Prisma 客户端现在在各个路由文件中独立创建

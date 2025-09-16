@@ -28,12 +28,13 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 // 注册路由
 app.use(router)
 
-// 初始化认证状态
+// 挂载应用
+app.mount('#app')
+
+// 初始化认证状态（异步，不阻塞应用启动）
 const authStore = useAuthStore()
 authStore.initializeAuth().then(() => {
-  console.log('🚀 应用启动完成')
+  console.log('🚀 认证初始化完成')
 }).catch((error) => {
-  console.error('❌ 应用启动失败:', error)
+  console.error('❌ 认证初始化失败:', error)
 })
-
-app.mount('#app')

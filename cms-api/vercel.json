@@ -1,6 +1,7 @@
 {
   "version": 2,
   "name": "cms-demo-api",
+  "buildCommand": "npm run build",
   "builds": [
     {
       "src": "index.js",
