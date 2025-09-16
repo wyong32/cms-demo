@@ -18,6 +18,9 @@ api.interceptors.request.use(
     const token = localStorage.getItem('cms_token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
+      console.log('🔑 请求携带token:', token.substring(0, 20) + '...')
+    } else {
+      console.warn('⚠️ 请求没有携带token')
     }
     
     // 为上传接口设置正确的Content-Type
@@ -25,6 +28,8 @@ api.interceptors.request.use(
       // 上传文件时，让浏览器自动设置Content-Type为multipart/form-data
       delete config.headers['Content-Type']
       console.log('📤 上传请求: 移除Content-Type让浏览器自动设置')
+      console.log('📤 上传URL:', config.url)
+      console.log('📤 请求方法:', config.method)
     }
     
     // 为AI生成接口设置更长的超时时间
@@ -65,6 +70,8 @@ api.interceptors.response.use(
     if (response) {
       const { status, data } = response
       
+      console.error(`❌ HTTP错误 ${status}:`, data)
+      
       switch (status) {
         case 401:
           // Token过期或无效，清除认证状态并跳转登录
@@ -82,6 +89,14 @@ api.interceptors.response.use(
           break
         case 404:
           ElMessage.error(data.error || '请求的资源不存在')
+          break
+        case 405:
+          ElMessage.error('请求方法不被允许，请检查API配置')
+          console.error('405错误详情:', {
+            url: error.config?.url,
+            method: error.config?.method,
+            headers: error.config?.headers
+          })
           break
         case 500:
           ElMessage.error(data.error || '服务器内部错误')
