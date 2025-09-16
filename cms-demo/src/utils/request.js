@@ -20,6 +20,13 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`
     }
     
+    // 为上传接口设置正确的Content-Type
+    if (config.url && config.url.includes('/upload/')) {
+      // 上传文件时，让浏览器自动设置Content-Type为multipart/form-data
+      delete config.headers['Content-Type']
+      console.log('📤 上传请求: 移除Content-Type让浏览器自动设置')
+    }
+    
     // 为AI生成接口设置更长的超时时间
     if (config.url && config.url.includes('/ai/generate')) {
       config.timeout = 60000 // AI生成设置60秒超时

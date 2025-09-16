@@ -159,11 +159,8 @@ export const uploadAPI = {
   uploadImage: (file) => {
     const formData = new FormData()
     formData.append('image', file)
-    return api.post('/upload/image', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
+    return api.post('/upload/image', formData)
+    // 不设置Content-Type，让浏览器自动设置multipart/form-data
   },
   
   // 上传多个图片
@@ -172,11 +169,8 @@ export const uploadAPI = {
     files.forEach(file => {
       formData.append('images', file)
     })
-    return api.post('/upload/images', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
+    return api.post('/upload/images', formData)
+    // 不设置Content-Type，让浏览器自动设置multipart/form-data
   },
   
   // 删除图片
