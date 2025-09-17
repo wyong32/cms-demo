@@ -408,19 +408,31 @@ const deleteImage = async (image) => {
       }
     )
 
-    // 根据图片类型删除对应的数据
-    if (image.type === 'template') {
-      // 删除数据模板
-      await templateAPI.deleteTemplate(image.sourceId)
-    } else if (image.type === 'project') {
-      // 删除项目数据
-      await projectDataAPI.deleteProjectData(image.sourceId)
-    }
+    const loadingMessage = ElMessage({
+      message: `正在删除图片"${image.title}"...`,
+      type: 'info',
+      duration: 0 // 不自动关闭
+    })
 
-    ElMessage.success('删除成功')
-    
-    // 刷新图片列表
-    await fetchImages()
+    try {
+      // 根据图片类型删除对应的数据
+      if (image.type === 'template') {
+        // 删除数据模板
+        await templateAPI.deleteTemplate(image.sourceId)
+      } else if (image.type === 'project') {
+        // 删除项目数据
+        await projectDataAPI.deleteProjectData(image.sourceId)
+      }
+
+      loadingMessage.close()
+      ElMessage.success('删除成功')
+      
+      // 刷新图片列表
+      await fetchImages()
+    } catch (deleteError) {
+      loadingMessage.close()
+      throw deleteError
+    }
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除图片失败:', error)

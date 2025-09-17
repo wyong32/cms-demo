@@ -54,143 +54,48 @@
             />
           </el-form-item>
 
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="发布日期" prop="publishDate" required>
-                <el-date-picker
-                  v-model="form.publishDate"
-                  type="date"
-                  placeholder="请选择发布日期"
-                  style="width: 100%"
-                  format="YYYY-MM-DD"
-                  value-format="YYYY-MM-DD"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="地址栏" prop="addressBar" required>
-                <el-input v-model="form.addressBar" placeholder="请输入地址栏内容" />
-              </el-form-item>
-            </el-col>
-          </el-row>
+          <el-form-item label="iframe链接" prop="iframeUrl" required>
+            <div class="iframe-input-group">
+              <el-input 
+                v-model="form.iframeUrl" 
+                placeholder="请输入iframe链接地址"
+                style="flex: 1; margin-right: 12px;"
+              />
+              <el-button 
+                type="primary" 
+                @click="handlePreviewIframe"
+                :disabled="!form.iframeUrl"
+              >
+                预览
+              </el-button>
+            </div>
+          </el-form-item>
 
-          <el-row :gutter="20">
-            <el-col :span="24">
-              <el-form-item label="iframe链接" prop="iframeUrl" required>
-                <div class="iframe-input-group">
-                  <el-input 
-                    v-model="form.iframeUrl" 
-                    placeholder="请输入iframe链接地址"
-                    style="flex: 1; margin-right: 12px;"
-                  />
-                  <el-button 
-                    type="primary" 
-                    @click="handlePreviewIframe"
-                    :disabled="!form.iframeUrl"
-                  >
-                    预览
-                  </el-button>
+          <el-form-item label="图片上传" prop="imageUrl" required>
+            <el-upload
+              ref="uploadRef"
+              name="image"
+              :show-file-list="false"
+              :on-success="handleUploadSuccess"
+              :before-upload="beforeUpload"
+              :on-error="handleUploadError"
+              :action="uploadAction"
+              :headers="uploadHeaders"
+              accept="image/*"
+              class="image-uploader"
+            >
+              <div v-if="form.imageUrl" class="uploaded-image">
+                <img :src="getImageUrl(form.imageUrl)" alt="上传的图片" />
+                <div class="image-overlay">
+                  <el-icon class="upload-icon"><Plus /></el-icon>
+                  <span>点击更换</span>
                 </div>
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="图片上传" prop="imageUrl" required>
-                <el-upload
-                  ref="uploadRef"
-                  name="image"
-                  :show-file-list="false"
-                  :on-success="handleUploadSuccess"
-                  :before-upload="beforeUpload"
-                  :on-error="handleUploadError"
-                  :action="uploadAction"
-                  :headers="uploadHeaders"
-                  accept="image/*"
-                  class="image-uploader"
-                >
-                  <div v-if="form.imageUrl" class="uploaded-image">
-                    <img :src="getImageUrl(form.imageUrl)" alt="上传的图片" />
-                    <div class="image-overlay">
-                      <el-icon class="upload-icon"><Plus /></el-icon>
-                      <span>点击更换</span>
-                    </div>
-                  </div>
-                  <div v-else class="upload-placeholder">
-                    <el-icon class="upload-icon"><Plus /></el-icon>
-                    <div class="upload-text">点击上传图片</div>
-                  </div>
-                </el-upload>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="图片描述" prop="imageAlt" required>
-                <el-input v-model="form.imageAlt" placeholder="请输入图片描述" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="模板标签" prop="tags" required>
-                <el-select
-                  v-model="form.tags"
-                  multiple
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="请输入标签，按回车添加"
-                  style="width: 100%"
-                >
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </div>
-
-        <!-- SEO配置 -->
-        <div class="form-section">
-          <h3>SEO配置</h3>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="SEO标题" prop="seoTitle" required>
-                <el-input v-model="form.seoTitle" placeholder="请输入SEO标题" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="SEO关键词" prop="seoKeywords" required>
-                <el-input v-model="form.seoKeywords" placeholder="请输入SEO关键词" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          
-          <el-form-item label="SEO描述" prop="seoDescription" required>
-            <el-input
-              v-model="form.seoDescription"
-              type="textarea"
-              :rows="3"
-              placeholder="请输入SEO描述"
-            />
-          </el-form-item>
-        </div>
-
-        <!-- 详细内容 -->
-        <div class="form-section">
-          <h3>详细内容</h3>
-          <el-form-item label="HTML内容" prop="detailsHtml" required>
-            <RichTextEditor
-              :key="editorKey"
-              v-model="form.detailsHtml"
-              placeholder="请输入详细的HTML内容"
-              height="400px"
-              :disabled="readonly"
-            />
-          </el-form-item>
-          
-          <!-- 临时调试：显示原始HTML内容 -->
-          <el-form-item label="原始HTML预览（调试用）" v-if="form.detailsHtml">
-            <div class="html-preview" v-html="form.detailsHtml" style="border: 1px solid #ddd; padding: 10px; max-height: 200px; overflow-y: auto;"></div>
-            <el-text type="info" size="small">长度: {{ form.detailsHtml?.length || 0 }} 字符</el-text>
+              </div>
+              <div v-else class="upload-placeholder">
+                <el-icon class="upload-icon"><Plus /></el-icon>
+                <div class="upload-text">点击上传图片</div>
+              </div>
+            </el-upload>
           </el-form-item>
         </div>
       </el-form>
@@ -224,7 +129,6 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Plus } from '@element-plus/icons-vue'
 import { dataTemplateAPI, categoryAPI, uploadAPI } from '../api'
-import RichTextEditor from '../components/RichTextEditor.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -236,7 +140,6 @@ const loading = ref(true)
 const categories = ref([])
 const previewDialogVisible = ref(false)
 const previewUrl = ref('')
-const editorKey = ref(0) // 用于强制重新初始化RichTextEditor
 
 // 上传相关
 const uploadHeaders = computed(() => ({
@@ -258,16 +161,8 @@ const form = reactive({
   title: '',
   description: '',
   categoryId: '',
-  publishDate: '',
-  addressBar: '',
   iframeUrl: '',
-  imageUrl: '',
-  imageAlt: '',
-  tags: [],
-  seoTitle: '',
-  seoDescription: '',
-  seoKeywords: '',
-  detailsHtml: ''
+  imageUrl: ''
 })
 
 // 表单验证规则
@@ -280,38 +175,13 @@ const rules = {
     { required: true, message: '请选择分类', trigger: 'change' }
   ],
   description: [
-    { required: true, message: '请输入模板描述', trigger: 'blur' },
-    { max: 500, message: '描述不能超过 500 个字符', trigger: 'blur' }
-  ],
-  publishDate: [
-    { required: true, message: '请选择发布日期', trigger: 'change' }
-  ],
-  addressBar: [
-    { required: true, message: '请输入地址栏', trigger: 'blur' }
+    { required: true, message: '请输入模板描述', trigger: 'blur' }
   ],
   iframeUrl: [
     { required: true, message: '请输入iframe链接', trigger: 'blur' }
   ],
   imageUrl: [
     { required: true, message: '请上传图片', trigger: 'change' }
-  ],
-  imageAlt: [
-    { required: true, message: '请输入图片描述', trigger: 'blur' }
-  ],
-  tags: [
-    { required: true, message: '请添加模板标签', trigger: 'change' }
-  ],
-  seoTitle: [
-    { required: true, message: '请输入SEO标题', trigger: 'blur' }
-  ],
-  seoDescription: [
-    { required: true, message: '请输入SEO描述', trigger: 'blur' }
-  ],
-  seoKeywords: [
-    { required: true, message: '请输入SEO关键词', trigger: 'blur' }
-  ],
-  detailsHtml: [
-    { required: true, message: '请输入HTML内容', trigger: 'blur' }
   ]
 }
 
@@ -342,23 +212,11 @@ const fetchDataTemplate = async (id) => {
       title: template.title || '',
       description: template.description || '',
       categoryId: template.categoryId || '',
-      publishDate: template.publishDate || '',
-      addressBar: template.addressBar || '',
       iframeUrl: template.iframeUrl || '',
-      imageUrl: template.imageUrl || '',
-      imageAlt: template.imageAlt || '',
-      tags: template.tags || [],
-      seoTitle: template.seoTitle || '',
-      seoDescription: template.seoDescription || '',
-      seoKeywords: template.seoKeywords || '',
-      detailsHtml: template.detailsHtml || ''
+      imageUrl: template.imageUrl || ''
     })
     
-    console.log('✅ 表单数据加载完成，HTML内容长度:', form.detailsHtml?.length || 0)
-    
-    // 强制重新初始化RichTextEditor组件
-    editorKey.value++
-    console.log('🔄 强制重新初始化RichTextEditor，key:', editorKey.value)
+    console.log('✅ 表单数据加载完成')
   } catch (error) {
     console.error('获取数据模板失败:', error)
     ElMessage.error('获取数据模板失败')
@@ -471,16 +329,8 @@ const handleReset = () => {
       title: '',
       description: '',
       categoryId: '',
-      publishDate: '',
-      addressBar: '',
       iframeUrl: '',
-      imageUrl: '',
-      imageAlt: '',
-      tags: [],
-      seoTitle: '',
-      seoDescription: '',
-      seoKeywords: '',
-      detailsHtml: ''
+      imageUrl: ''
     })
   }
 }

@@ -60,16 +60,6 @@ const routes = [
         }
       },
       {
-        path: 'ai-generate/:type',
-        name: 'AIGenerateForm',
-        component: () => import('../views/AIGenerateForm.vue'),
-        meta: {
-          title: 'AI智能生成',
-          hideInMenu: true,
-          hideInBreadcrumb: false
-        }
-      },
-      {
         path: 'categories',
         name: 'Categories',
         component: () => import('../views/Categories.vue'),
@@ -132,6 +122,16 @@ const routes = [
         meta: {
           title: '编辑项目数据',
           hideInMenu: true
+        }
+      },
+      {
+        path: 'ai-generate/:type',
+        name: 'AIGenerateForm',
+        component: () => import('../views/AIGenerateForm.vue'),
+        meta: {
+          title: 'AI智能生成',
+          hideInMenu: true,
+          hideInBreadcrumb: false
         }
       },
       {

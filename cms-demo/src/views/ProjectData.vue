@@ -123,63 +123,44 @@
       title="从模板创建数据"
       width="900px"
       destroy-on-close
+      :close-on-click-modal="!aiGenerating"
+      :close-on-press-escape="!aiGenerating"
+      :show-close="!aiGenerating"
     >
       <div class="template-selector">
-        <el-table 
-          :data="templates" 
-          v-loading="templatesLoading"
-          @row-click="handleSelectTemplate"
-          :row-class-name="getTemplateRowClassName"
-          style="width: 100%"
+        <div 
+          v-loading="templatesLoading || aiGenerating" 
+          :element-loading-text="aiGenerating ? 'AI生成中...' : '加载模板中...'"
+          class="template-grid"
         >
-          <el-table-column label="标题" prop="title" min-width="200">
-            <template #default="{ row }">
-              <div class="template-title">
-                <h4>{{ row.title }}</h4>
+          <div 
+            v-for="template in templates" 
+            :key="template.id"
+            class="template-card"
+            :class="{ 'selected': templateForm.templateId === template.id, 'disabled': aiGenerating }"
+            @click="!aiGenerating && handleSelectTemplate(template)"
+          >
+            <div class="template-image">
+              <img 
+                v-if="template.imageUrl" 
+                :src="getImageUrl(template.imageUrl)" 
+                :alt="template.imageAlt || template.title"
+                class="template-thumbnail"
+              />
+              <div v-else class="no-image">
+                <el-icon><Picture /></el-icon>
               </div>
-            </template>
-          </el-table-column>
-          
-          <el-table-column label="类型" prop="category" width="120">
-            <template #default="{ row }">
-              <el-tag size="small" type="primary">
-                {{ row.category?.name || '未分类' }}
+            </div>
+            <div class="template-info">
+              <h4 class="template-title">{{ template.title }}</h4>
+              <el-tag size="small" type="primary" class="template-category">
+                {{ template.category?.name || '未分类' }}
               </el-tag>
-            </template>
-          </el-table-column>
-          
-          <el-table-column label="图片" width="100">
-            <template #default="{ row }">
-              <div class="template-image">
-                <img 
-                  v-if="row.imageUrl" 
-                  :src="getImageUrl(row.imageUrl)" 
-                  :alt="row.imageAlt || row.title"
-                  class="template-thumbnail"
-                />
-                <div v-else class="no-image">
-                  <el-icon><Picture /></el-icon>
-                  <span>无图片</span>
-                </div>
-              </div>
-            </template>
-          </el-table-column>
-          
-          <el-table-column label="操作" width="120" fixed="right">
-            <template #default="{ row }">
-              <el-button 
-                type="primary" 
-                size="small"
-                :disabled="templateForm.templateId === row.id"
-                @click.stop="handleSelectTemplate(row)"
-              >
-                {{ templateForm.templateId === row.id ? '已选择' : '选择该模板' }}
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+            </div>
+          </div>
+        </div>
 
-        <el-empty v-if="!templatesLoading && templates.length === 0" description="暂无模板数据" />
+        <el-empty v-if="!templatesLoading && !aiGenerating && templates.length === 0" description="暂无模板数据" />
       </div>
 
       <template #footer>
@@ -187,13 +168,15 @@
           <el-text type="info" v-if="templateForm.templateId">
             已选择模板，点击创建按钮继续
           </el-text>
-          <el-button @click="templateDialogVisible = false">取消</el-button>
+          <el-button @click="templateDialogVisible = false" :disabled="aiGenerating">取消</el-button>
           <el-button 
             type="primary" 
             @click="handleCreateFromTemplate"
-            :disabled="!templateForm.templateId"
+            :disabled="!templateForm.templateId || aiGenerating"
+            :loading="aiGenerating"
           >
-            创建
+            <el-icon v-if="!aiGenerating"><MagicStick /></el-icon>
+            {{ aiGenerating ? 'AI生成中...' : 'AI生成创建' }}
           </el-button>
         </div>
       </template>
@@ -207,7 +190,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Plus, Document, MagicStick, Picture } from '@element-plus/icons-vue'
-import { projectDataAPI, dataTemplateAPI } from '../api'
+import { projectDataAPI, dataTemplateAPI, aiAPI } from '../api'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -220,6 +203,8 @@ const selectedRows = ref([])
 const templates = ref([])
 
 const templateDialogVisible = ref(false)
+const aiGenerating = ref(false)
+const selectedTemplate = ref(null)
 
 // 项目信息
 const projectId = computed(() => route.params.projectId)
@@ -346,9 +331,21 @@ const handleDelete = async (row) => {
       }
     )
     
-    await projectDataAPI.deleteProjectData(row.id)
-    ElMessage.success('删除成功')
-    fetchProjectData()
+    const loadingMessage = ElMessage({
+      message: '正在删除数据...',
+      type: 'info',
+      duration: 0 // 不自动关闭
+    })
+    
+    try {
+      await projectDataAPI.deleteProjectData(row.id)
+      loadingMessage.close()
+      ElMessage.success('删除成功')
+      fetchProjectData()
+    } catch (deleteError) {
+      loadingMessage.close()
+      throw deleteError
+    }
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
@@ -370,12 +367,24 @@ const handleBatchDelete = async () => {
       }
     )
     
-    const promises = selectedRows.value.map(row => projectDataAPI.deleteProjectData(row.id))
-    await Promise.all(promises)
+    const loadingMessage = ElMessage({
+      message: `正在删除 ${selectedRows.value.length} 条数据...`,
+      type: 'info',
+      duration: 0 // 不自动关闭
+    })
     
-    ElMessage.success('批量删除成功')
-    selectedRows.value = []
-    fetchProjectData()
+    try {
+      const promises = selectedRows.value.map(row => projectDataAPI.deleteProjectData(row.id))
+      await Promise.all(promises)
+      
+      loadingMessage.close()
+      ElMessage.success('批量删除成功')
+      selectedRows.value = []
+      fetchProjectData()
+    } catch (deleteError) {
+      loadingMessage.close()
+      throw deleteError
+    }
   } catch (error) {
     if (error !== 'cancel') {
       console.error('批量删除失败:', error)
@@ -441,12 +450,9 @@ const handleSizeChange = (size) => {
 // 处理选择模板
 const handleSelectTemplate = (template) => {
   templateForm.templateId = template.id
+  selectedTemplate.value = template
 }
 
-// 获取模板行样式类名
-const getTemplateRowClassName = ({ row }) => {
-  return templateForm.templateId === row.id ? 'selected-template-row' : ''
-}
 
 // 获取图片URL
 const getImageUrl = (url) => {
@@ -465,22 +471,74 @@ const getImageUrl = (url) => {
 
 // 处理从模板创建
 const handleCreateFromTemplate = async () => {
+  if (!selectedTemplate.value) {
+    ElMessage.warning('请先选择一个模板')
+    return
+  }
+
   try {
-    // 跳转到编辑页面，并传递模板信息
-    router.push({ 
-      name: 'ProjectDataAdd',
-      params: { projectId: projectId.value },
-      query: { 
-        projectName: projectName.value,
-        templateId: templateForm.templateId
-      }
+    aiGenerating.value = true
+
+    // 调试信息
+    console.log('🔍 选中的模板数据:', selectedTemplate.value)
+    console.log('🔍 iframeUrl值:', selectedTemplate.value?.iframeUrl)
+
+    // 验证模板数据
+    if (!selectedTemplate.value?.iframeUrl) {
+      ElMessage.error('选中的模板缺少iframe链接，无法创建项目数据')
+      aiGenerating.value = false
+      return
+    }
+
+    // 调用AI生成接口，基于选中的模板生成项目数据
+    const aiResponse = await aiAPI.generateFromTemplate({
+      type: 'project',
+      projectId: projectId.value,
+      templateId: templateForm.templateId,
+      title: selectedTemplate.value.title,
+      description: selectedTemplate.value.description,
+      imageUrl: selectedTemplate.value.imageUrl,
+      iframeUrl: selectedTemplate.value.iframeUrl,
+      options: ['autoSEO', 'autoContent', 'autoStructure']
     })
-    
-    templateDialogVisible.value = false
-    templateForm.templateId = ''
+
+    if (aiResponse.data.success) {
+      // 创建项目数据
+      const projectData = {
+        projectId: projectId.value,
+        categoryId: selectedTemplate.value.categoryId,
+        data: {
+          title: aiResponse.data.data.title,
+          description: aiResponse.data.data.description,
+          iframeUrl: selectedTemplate.value.iframeUrl,
+          publishDate: new Date().toISOString().split('T')[0],
+          imageUrl: selectedTemplate.value.imageUrl,
+          imageAlt: aiResponse.data.data.imageAlt || selectedTemplate.value.title,
+          addressBar: aiResponse.data.data.addressBar,
+          tags: aiResponse.data.data.tags || [],
+          seo_title: aiResponse.data.data.seoTitle,
+          seo_description: aiResponse.data.data.seoDescription,
+          seo_keywords: aiResponse.data.data.seoKeywords,
+          detailsHtml: aiResponse.data.data.detailsHtml
+        }
+      }
+
+      await projectDataAPI.createProjectData(projectData)
+      ElMessage.success('基于模板AI生成项目数据成功')
+      fetchProjectData()
+      
+      // 创建成功后关闭弹出框并重置状态
+      templateDialogVisible.value = false
+      templateForm.templateId = ''
+      selectedTemplate.value = null
+    } else {
+      ElMessage.error('AI生成失败: ' + (aiResponse.data.error || '未知错误'))
+    }
   } catch (error) {
-    console.error('处理模板创建失败:', error)
-    ElMessage.error('处理模板创建失败')
+    console.error('从模板创建失败:', error)
+    ElMessage.error('从模板创建失败: ' + (error.response?.data?.error || error.message))
+  } finally {
+    aiGenerating.value = false
   }
 }
 
@@ -589,32 +647,74 @@ onMounted(() => {
 }
 
 
-/* 模板选择表格样式 */
+/* 模板选择网格样式 */
 .template-selector {
   max-height: 500px;
   overflow-y: auto;
 }
 
-.template-title h4 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
-  line-height: 1.4;
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  padding: 16px 0;
+}
+
+.template-card {
+  border: 2px solid #e4e7ed;
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-height: 140px;
+}
+
+.template-card:hover {
+  border-color: #409eff;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.template-card.selected {
+  border-color: #409eff;
+  background-color: #f0f9ff;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+}
+
+.template-card.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.template-card.disabled:hover {
+  border-color: #e4e7ed;
+  box-shadow: none;
+  transform: none;
 }
 
 .template-image {
+  width: 100%;
+  height: 80px;
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  overflow: hidden;
+  background-color: #f5f7fa;
 }
 
 .template-thumbnail {
-  width: 60px;
-  height: 40px;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  border-radius: 4px;
-  border: 1px solid #e4e7ed;
+  border-radius: 6px;
 }
 
 .no-image {
@@ -622,18 +722,45 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 60px;
-  height: 40px;
-  background: #f5f7fa;
-  border: 1px dashed #d9d9d9;
-  border-radius: 4px;
+  width: 100%;
+  height: 100%;
   color: #909399;
   font-size: 12px;
 }
 
 .no-image .el-icon {
-  font-size: 16px;
-  margin-bottom: 2px;
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.template-info {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.template-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1.3;
+  text-align: center;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 32px;
+}
+
+.template-category {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .dialog-footer {
@@ -642,26 +769,19 @@ onMounted(() => {
   justify-content: space-between;
 }
 
-/* 选中行的样式 */
-:deep(.selected-template-row) {
-  background-color: #f0f9ff !important;
-}
-
-:deep(.selected-template-row:hover) {
-  background-color: #e0f2fe !important;
-}
-
-/* 表格行点击效果 */
-:deep(.el-table__row) {
-  cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-:deep(.el-table__row:hover) {
-  background-color: #f5f7fa;
-}
-
 /* 响应式样式 */
+@media (max-width: 1200px) {
+  .template-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .template-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
   .page-header {
     flex-direction: column;
@@ -679,14 +799,62 @@ onMounted(() => {
     padding: 12px;
   }
   
-  .template-thumbnail {
-    width: 40px;
-    height: 30px;
+  .template-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
   }
   
-  .no-image {
-    width: 40px;
-    height: 30px;
+  .template-card {
+    min-height: 120px;
+    padding: 8px;
+  }
+  
+  .template-image {
+    height: 60px;
+  }
+  
+  .template-title {
+    font-size: 12px;
+    min-height: 28px;
+  }
+  
+  .template-category {
+    font-size: 10px;
+    padding: 1px 4px;
+  }
+}
+
+@media (max-width: 480px) {
+  .template-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  
+  .template-card {
+    min-height: 100px;
+    flex-direction: row;
+    text-align: left;
+    align-items: center;
+  }
+  
+  .template-image {
+    width: 60px;
+    height: 60px;
+    margin-right: 12px;
+    margin-bottom: 0;
+    flex-shrink: 0;
+  }
+  
+  .template-info {
+    align-items: flex-start;
+    flex: 1;
+  }
+  
+  .template-title {
+    text-align: left;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    min-height: auto;
   }
 }
 </style>

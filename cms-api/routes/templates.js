@@ -364,6 +364,9 @@ router.get('/bulk/for-project', authenticateToken, async (req, res) => {
         id: true,
         title: true,
         description: true,
+        iframeUrl: true,
+        imageUrl: true,
+        categoryId: true,
         category: {
           select: {
             id: true,
@@ -372,7 +375,6 @@ router.get('/bulk/for-project', authenticateToken, async (req, res) => {
           }
         },
         tags: true,
-        imageUrl: true,
         createdAt: true
       },
       orderBy: { createdAt: 'desc' },

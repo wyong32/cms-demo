@@ -141,7 +141,10 @@ export const logAPI = {
 // AI生成相关API
 export const aiAPI = {
   // AI智能生成
-  generate: (data) => api.post('/ai/generate', data)
+  generate: (data) => api.post('/ai/generate', data),
+  
+  // 从模板AI生成
+  generateFromTemplate: (data) => api.post('/ai/generate-from-template', data)
 }
 
 // 统计相关API

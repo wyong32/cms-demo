@@ -107,7 +107,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // 创建项目（仅管理员）
 router.post('/', authenticateToken, requireAdmin, validateRequired(['name']), async (req, res) => {
   try {
-    const { name, description, fields = [] } = req.body;
+    const { name, category, description, fields = [] } = req.body;
 
     // 检查项目名是否已存在
     const existingProject = await prisma.cMSProject.findUnique({
@@ -149,6 +149,7 @@ router.post('/', authenticateToken, requireAdmin, validateRequired(['name']), as
     const project = await prisma.cMSProject.create({
       data: {
         name: name.trim(),
+        category: category?.trim() || null,
         description: description?.trim() || null,
         createdBy: req.user.id,
         fields: {

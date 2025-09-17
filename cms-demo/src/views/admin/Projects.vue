@@ -367,7 +367,7 @@ const handleEdit = async (row) => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除项目“${row.name}”吗？删除后将无法恢复！`,
+      `确定要删除项目"${row.name}"吗？删除后将无法恢复！`,
       '警告',
       {
         confirmButtonText: '确定删除',
@@ -376,9 +376,21 @@ const handleDelete = async (row) => {
       }
     )
     
-    await projectAPI.deleteProject(row.id)
-    ElMessage.success('项目删除成功')
-    fetchProjects()
+    const loadingMessage = ElMessage({
+      message: `正在删除项目"${row.name}"...`,
+      type: 'info',
+      duration: 0 // 不自动关闭
+    })
+    
+    try {
+      await projectAPI.deleteProject(row.id)
+      loadingMessage.close()
+      ElMessage.success('项目删除成功')
+      fetchProjects()
+    } catch (deleteError) {
+      loadingMessage.close()
+      throw deleteError
+    }
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除项目失败:', error)

@@ -254,11 +254,16 @@
                     height="400px"
                     :disabled="readonly"
                   />
-                  <!-- 原始HTML预览（调试用） -->
-                  <el-form-item label="原始HTML预览（调试用）" v-if="form.data[field.fieldName]">
-                    <div class="html-preview" v-html="form.data[field.fieldName]" style="border: 1px solid #ddd; padding: 10px; max-height: 200px; overflow-y: auto;"></div>
-                    <el-text type="info" size="small">长度: {{ form.data[field.fieldName]?.length || 0 }} 字符</el-text>
-                  </el-form-item>
+                </el-form-item>
+                
+                <!-- 原始HTML预览（调试用） -->
+                <el-form-item 
+                  v-if="form.data[field.fieldName]" 
+                  label="原始HTML预览（调试用）"
+                  class="html-preview-item"
+                >
+                  <div class="html-preview" v-html="form.data[field.fieldName]"></div>
+                  <el-text type="info" size="small">长度: {{ form.data[field.fieldName]?.length || 0 }} 字符</el-text>
                 </el-form-item>
               </el-col>
             </div>
@@ -343,7 +348,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Plus } from '@element-plus/icons-vue'
@@ -433,13 +438,31 @@ const rules = computed(() => {
   projectFields.value.forEach(field => {
     if (field.isRequired) {
       dynamicRules[`data.${field.fieldName}`] = [
-        { required: true, message: `请输入${getFieldLabel(field)}`, trigger: 'blur' }
+        { 
+          required: true, 
+          message: `请输入${getFieldLabel(field)}`, 
+          trigger: 'blur',
+          validator: (rule, value, callback) => {
+            if (!value || (typeof value === 'string' && value.trim() === '') || (Array.isArray(value) && value.length === 0)) {
+              callback(new Error(`请输入${getFieldLabel(field)}`))
+            } else {
+              callback()
+            }
+          }
+        }
       ]
     }
   })
   
   return dynamicRules
 })
+
+// 清除表单验证
+const clearValidation = () => {
+  if (formRef.value) {
+    formRef.value.clearValidate()
+  }
+}
 
 // 获列宽度
 const getColSpan = (field) => {
@@ -572,25 +595,28 @@ const fetchProject = async () => {
       console.log('项目字段:', projectFields.value)
     }
     
-    // 初始化表单数据
-    project.fields.forEach(field => {
-      if (field.fieldType === 'ARRAY') {
-        form.data[field.fieldName] = []
-      } else {
-        form.data[field.fieldName] = ''
-      }
-    })
-    
-    if (import.meta.env.DEV) {
-      console.log('初始化后的表单数据:', form.data)
-    }
-    
-    // 如果是从模板创建，预填充模板数据
-    if (templateId.value && !isEdit.value) {
+    // 只在非编辑模式下初始化表单数据
+    if (!isEdit.value) {
+      // 初始化表单数据
+      project.fields.forEach(field => {
+        if (field.fieldType === 'ARRAY') {
+          form.data[field.fieldName] = []
+        } else {
+          form.data[field.fieldName] = ''
+        }
+      })
+      
       if (import.meta.env.DEV) {
-        console.log('检测到模板ID，开始获取模板数据')
+        console.log('初始化后的表单数据:', form.data)
       }
-      await fetchTemplateData()
+      
+      // 如果是从模板创建，预填充模板数据
+      if (templateId.value) {
+        if (import.meta.env.DEV) {
+          console.log('检测到模板ID，开始获取模板数据')
+        }
+        await fetchTemplateData()
+      }
     }
   } catch (error) {
     console.error('获取项目信息失败:', error)
@@ -656,7 +682,31 @@ const fetchProjectData = async (id) => {
     const response = await projectDataAPI.getProjectDataById(id)
     const projectData = response.data.projectData
     
-    form.data = { ...projectData.data }
+    // 确保表单数据对象存在
+    if (!form.data) {
+      form.data = {}
+    }
+    
+    // 先初始化所有字段为空值
+    projectFields.value.forEach(field => {
+      if (field.fieldType === 'ARRAY') {
+        form.data[field.fieldName] = []
+      } else {
+        form.data[field.fieldName] = ''
+      }
+    })
+    
+    // 然后填充实际数据
+    form.data = { ...form.data, ...projectData.data }
+    
+    if (import.meta.env.DEV) {
+      console.log('加载的项目数据:', projectData.data)
+      console.log('填充后的表单数据:', form.data)
+    }
+    
+    // 清除表单验证，避免显示红字
+    await nextTick()
+    clearValidation()
   } catch (error) {
     console.error('获取项目数据失败:', error)
     ElMessage.error('获取项目数据失败')
@@ -753,6 +803,10 @@ onMounted(async () => {
     if (isEdit.value) {
       await fetchProjectData(route.params.id)
     }
+    
+    // 页面加载完成后清除验证
+    await nextTick()
+    clearValidation()
   } catch (error) {
     console.error('页面初始化失败:', error)
     ElMessage.error('页面加载失败，请刷新重试')
@@ -917,6 +971,49 @@ onMounted(async () => {
 
 .upload-text {
   font-size: 14px;
+}
+
+/* HTML预览样式 */
+.html-preview-item {
+  margin-top: 16px;
+}
+
+.html-preview {
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  padding: 12px;
+  background-color: #fafafa;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.html-preview :deep(h1),
+.html-preview :deep(h2),
+.html-preview :deep(h3),
+.html-preview :deep(h4),
+.html-preview :deep(h5),
+.html-preview :deep(h6) {
+  margin: 8px 0;
+  color: #303133;
+}
+
+.html-preview :deep(p) {
+  margin: 8px 0;
+  color: #606266;
+}
+
+.html-preview :deep(ul),
+.html-preview :deep(ol) {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.html-preview :deep(li) {
+  margin: 4px 0;
+  color: #606266;
 }
 
 /* 响应式样式 */
