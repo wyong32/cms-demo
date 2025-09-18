@@ -4,7 +4,12 @@
     <div class="page-header">
       <h2>数据模板管理</h2>
       <div class="header-actions">
-        <el-button type="primary" @click="handleAdd">
+        <el-button 
+          type="primary" 
+          @click="handleAdd"
+          :loading="navigatingToAdd"
+          :disabled="batchDeleting"
+        >
           <el-icon><Plus /></el-icon>
           添加数据模板
         </el-button>
@@ -96,10 +101,22 @@
             
             <!-- 操作按钮 -->
             <div class="template-actions">
-              <el-button type="primary" size="small" @click.stop="handleEdit(template)">
+              <el-button 
+                type="primary" 
+                size="small" 
+                @click.stop="handleEdit(template)"
+                :loading="editingIds.has(template.id)"
+                :disabled="deletingIds.has(template.id) || batchDeleting || navigatingToAdd"
+              >
                 编辑
               </el-button>
-              <el-button type="danger" size="small" @click.stop="handleDelete(template)">
+              <el-button 
+                type="danger" 
+                size="small" 
+                @click.stop="handleDelete(template)"
+                :loading="deletingIds.has(template.id)"
+                :disabled="editingIds.has(template.id) || batchDeleting || navigatingToAdd"
+              >
                 删除
               </el-button>
             </div>
@@ -125,7 +142,12 @@
 
     <!-- 批量操作 -->
     <div v-if="selectedRows.length > 0" class="batch-actions">
-      <el-button type="danger" @click="handleBatchDelete">
+      <el-button 
+        type="danger" 
+        @click="handleBatchDelete"
+        :loading="batchDeleting"
+        :disabled="navigatingToAdd"
+      >
         批量删除 ({{ selectedRows.length }})
       </el-button>
     </div>
@@ -145,6 +167,12 @@ const loading = ref(false)
 const tableData = ref([])
 const categories = ref([])
 const selectedRows = ref([])
+
+// 各种操作的loading状态
+const editingIds = ref(new Set()) // 正在编辑的模板ID
+const deletingIds = ref(new Set()) // 正在删除的模板ID
+const batchDeleting = ref(false) // 批量删除loading
+const navigatingToAdd = ref(false) // 跳转到添加页面loading
 
 // 搜索表单
 const searchForm = reactive({
@@ -217,20 +245,31 @@ const fetchDataTemplates = async () => {
 
 // 处理添加
 const handleAdd = () => {
-  router.push({ name: 'DataTemplateAdd' })
+  navigatingToAdd.value = true
+  
+  setTimeout(() => {
+    router.push({ name: 'DataTemplateAdd' })
+    navigatingToAdd.value = false
+  }, 200)
 }
 
-
 // 处理编辑
-const handleEdit = (row) => {
-  router.push({ name: 'DataTemplateEdit', params: { id: row.id } })
+const handleEdit = (template) => {
+  editingIds.value.add(template.id)
+  
+  setTimeout(() => {
+    router.push({ name: 'DataTemplateEdit', params: { id: template.id } })
+    editingIds.value.delete(template.id)
+  }, 200)
 }
 
 // 处理删除
-const handleDelete = async (row) => {
+const handleDelete = async (template) => {
+  if (deletingIds.value.has(template.id)) return // 防止重复点击
+  
   try {
     await ElMessageBox.confirm(
-      `确定要删除数据模板"${row.title}"吗？`,
+      `确定要删除数据模板"${template.title}"吗？`,
       '提示',
       {
         confirmButtonText: '确定',
@@ -239,14 +278,16 @@ const handleDelete = async (row) => {
       }
     )
     
+    deletingIds.value.add(template.id)
+    
     const loadingMessage = ElMessage({
-      message: `正在删除模板"${row.title}"...`,
+      message: `正在删除模板"${template.title}"...`,
       type: 'info',
       duration: 0 // 不自动关闭
     })
     
     try {
-      await dataTemplateAPI.deleteTemplate(row.id)
+      await dataTemplateAPI.deleteTemplate(template.id)
       loadingMessage.close()
       ElMessage.success('删除成功')
       fetchDataTemplates()
@@ -259,11 +300,15 @@ const handleDelete = async (row) => {
       console.error('删除失败:', error)
       ElMessage.error('删除失败')
     }
+  } finally {
+    deletingIds.value.delete(template.id)
   }
 }
 
 // 处理批量删除
 const handleBatchDelete = async () => {
+  if (batchDeleting.value) return // 防止重复点击
+  
   try {
     await ElMessageBox.confirm(
       `确定要删除选中的 ${selectedRows.value.length} 个数据模板吗？`,
@@ -274,6 +319,8 @@ const handleBatchDelete = async () => {
         type: 'warning'
       }
     )
+    
+    batchDeleting.value = true
     
     const loadingMessage = ElMessage({
       message: `正在删除 ${selectedRows.value.length} 个数据模板...`,
@@ -298,6 +345,8 @@ const handleBatchDelete = async () => {
       console.error('批量删除失败:', error)
       ElMessage.error('批量删除失败')
     }
+  } finally {
+    batchDeleting.value = false
   }
 }
 
@@ -482,8 +531,7 @@ onMounted(() => {
 }
 
 .template-image {
-  width: 100%;
-  height: 120px;
+  aspect-ratio: 1/1;
   border-radius: 6px;
   overflow: hidden;
   margin-bottom: 12px;

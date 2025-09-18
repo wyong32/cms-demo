@@ -3,12 +3,25 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="header-left">
-        <el-button @click="handleGoBack" :icon="ArrowLeft">返回</el-button>
+        <el-button @click="handleGoBack" :icon="ArrowLeft" :loading="navigatingBack" :disabled="saving || resetting">返回</el-button>
         <h2>{{ isEdit ? '编辑数据模板' : '添加数据模板' }}</h2>
       </div>
       <div class="header-right">
-        <el-button @click="handleReset" v-if="!readonly">重置</el-button>
-        <el-button type="primary" @click="handleSave" :loading="saving" v-if="!readonly">
+        <el-button 
+          @click="handleReset" 
+          v-if="!readonly"
+          :loading="resetting"
+          :disabled="saving || navigatingBack"
+        >
+          重置
+        </el-button>
+        <el-button 
+          type="primary" 
+          @click="handleSave" 
+          :loading="saving" 
+          v-if="!readonly"
+          :disabled="resetting || navigatingBack"
+        >
           保存
         </el-button>
       </div>
@@ -126,7 +139,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Plus } from '@element-plus/icons-vue'
 import { dataTemplateAPI, categoryAPI, uploadAPI } from '../api'
 
@@ -137,6 +150,8 @@ const formRef = ref()
 const uploadRef = ref()
 const saving = ref(false)
 const loading = ref(true)
+const resetting = ref(false)
+const navigatingBack = ref(false)
 const categories = ref([])
 const previewDialogVisible = ref(false)
 const previewUrl = ref('')
@@ -299,6 +314,35 @@ const handleSave = async () => {
   try {
     await formRef.value.validate()
     
+    // 检查模板标题重复（仅在新建时检查）
+    if (!isEdit.value && form.title) {
+      try {
+        const duplicateResponse = await dataTemplateAPI.checkDuplicate(form.title)
+        if (duplicateResponse.data.isDuplicate) {
+          const existingTemplate = duplicateResponse.data.existingTemplate
+          await ElMessageBox.confirm(
+            `标题"${form.title}"已存在于数据模板中！\n\n` +
+            `现有模板信息：\n` +
+            `分类：${existingTemplate.categoryName}\n` +
+            `创建时间：${new Date(existingTemplate.createdAt).toLocaleString()}\n\n` +
+            `是否仍要继续保存？这将创建重复的数据模板。`,
+            '模板标题重复',
+            {
+              confirmButtonText: '继续保存',
+              cancelButtonText: '取消',
+              type: 'warning'
+            }
+          )
+        }
+      } catch (duplicateError) {
+        if (duplicateError === 'cancel') {
+          return // 用户取消
+        }
+        console.error('检查重复失败:', duplicateError)
+        // 继续执行，不阻断流程
+      }
+    }
+    
     saving.value = true
     
     if (isEdit.value) {
@@ -321,23 +365,40 @@ const handleSave = async () => {
 }
 
 // 重置表单
-const handleReset = () => {
-  if (isEdit.value) {
-    fetchDataTemplate(route.params.id)
-  } else {
-    Object.assign(form, {
-      title: '',
-      description: '',
-      categoryId: '',
-      iframeUrl: '',
-      imageUrl: ''
-    })
+const handleReset = async () => {
+  if (resetting.value) return // 防止重复点击
+  
+  resetting.value = true
+  
+  try {
+    if (isEdit.value) {
+      await fetchDataTemplate(route.params.id)
+    } else {
+      Object.assign(form, {
+        title: '',
+        description: '',
+        categoryId: '',
+        iframeUrl: '',
+        imageUrl: ''
+      })
+    }
+    ElMessage.success('重置成功')
+  } catch (error) {
+    console.error('重置失败:', error)
+    ElMessage.error('重置失败')
+  } finally {
+    resetting.value = false
   }
 }
 
 // 返回
 const handleGoBack = () => {
-  router.push({ name: 'DataTemplates' })
+  navigatingBack.value = true
+  
+  setTimeout(() => {
+    router.push({ name: 'DataTemplates' })
+    navigatingBack.value = false
+  }, 200)
 }
 
 // 页面加载时获取数据

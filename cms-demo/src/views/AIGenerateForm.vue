@@ -56,8 +56,8 @@
             />
           </el-form-item>
 
-          <!-- 分类选择（仅数据模板需要） -->
-          <el-form-item v-if="generateType === 'template'" label="分类" prop="categoryId" required>
+          <!-- 分类选择（模板和项目数据都需要） -->
+          <el-form-item label="分类" prop="categoryId" required>
             <el-select v-model="form.categoryId" placeholder="请选择分类" style="width: 100%">
               <el-option
                 v-for="category in categories"
@@ -66,6 +66,11 @@
                 :value="category.id"
               />
             </el-select>
+            <div class="category-tip">
+              <el-text type="info" size="small">
+                {{ generateType === 'template' ? '选择分类有助于AI生成更符合分类特征的内容' : '选择分类后，该数据会自动添加到对应分类的数据模板中' }}
+              </el-text>
+            </div>
           </el-form-item>
 
           <!-- 项目选择（仅项目数据需要） -->
@@ -265,9 +270,9 @@ const rules = {
     { required: true, message: '请输入标题', trigger: 'blur' },
     { min: 2, max: 100, message: '标题长度在 2 到 100 个字符', trigger: 'blur' }
   ],
-  categoryId: generateType.value === 'template' ? [
+  categoryId: [
     { required: true, message: '请选择分类', trigger: 'change' }
-  ] : [],
+  ],
   projectId: generateType.value === 'project' ? [
     { required: true, message: '请选择项目', trigger: 'change' }
   ] : [],
@@ -279,8 +284,6 @@ const rules = {
 
 // 获取分类列表
 const fetchCategories = async () => {
-  if (generateType.value !== 'template') return
-  
   try {
     const response = await categoryAPI.getCategories()
     categories.value = response.data.categories || []
@@ -361,6 +364,57 @@ const handleGenerate = async () => {
   try {
     await formRef.value.validate()
     
+    // 检查标题重复
+    if (form.title) {
+      try {
+        // 1. 检查数据模板中是否重复
+        const templateDuplicateResponse = await dataTemplateAPI.checkDuplicate(form.title)
+        if (templateDuplicateResponse.data.isDuplicate) {
+          const existingTemplate = templateDuplicateResponse.data.existingTemplate
+          await ElMessageBox.confirm(
+            `标题"${form.title}"已存在于数据模板中！\n\n` +
+            `现有模板信息：\n` +
+            `分类：${existingTemplate.categoryName}\n` +
+            `创建时间：${new Date(existingTemplate.createdAt).toLocaleString()}\n\n` +
+            `是否仍要继续生成？这将创建项目数据，但不会创建新的模板。`,
+            '模板标题重复',
+            {
+              confirmButtonText: '继续生成',
+              cancelButtonText: '取消',
+              type: 'warning'
+            }
+          )
+        }
+        
+        // 2. 如果是项目数据类型，还要检查项目内是否重复
+        if (generateType.value === 'project' && form.projectId) {
+          const projectDuplicateResponse = await projectDataAPI.checkDuplicateInProject(form.projectId, form.title)
+          if (projectDuplicateResponse.data.isDuplicate) {
+            const existingData = projectDuplicateResponse.data.existingData
+            await ElMessageBox.confirm(
+              `标题"${form.title}"在当前项目中已存在！\n\n` +
+              `现有数据信息：\n` +
+              `创建者：${existingData.creator}\n` +
+              `创建时间：${new Date(existingData.createdAt).toLocaleString()}\n\n` +
+              `是否仍要继续生成？这将创建重复的项目数据。`,
+              '项目内标题重复',
+              {
+                confirmButtonText: '继续生成',
+                cancelButtonText: '取消',
+                type: 'warning'
+              }
+            )
+          }
+        }
+      } catch (duplicateError) {
+        if (duplicateError === 'cancel') {
+          return // 用户取消
+        }
+        console.error('检查重复失败:', duplicateError)
+        // 继续执行，不阻断流程
+      }
+    }
+    
     generating.value = true
     
     // 显示生成进度提示
@@ -378,7 +432,7 @@ const handleGenerate = async () => {
       imageUrl: form.imageUrl,
       iframeUrl: form.iframeUrl,
       options: form.generateOptions,
-      ...(generateType.value === 'template' && { categoryId: form.categoryId }),
+      categoryId: form.categoryId, // 现在所有类型都需要分类
       ...(generateType.value === 'project' && { projectId: form.projectId })
     }
     
@@ -647,6 +701,10 @@ onMounted(() => {
 }
 
 .project-info-tip {
+  margin-top: 8px;
+}
+
+.category-tip {
   margin-top: 8px;
 }
 

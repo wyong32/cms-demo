@@ -198,6 +198,56 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
           description: `AI生成了项目数据: ${aiGeneratedData.title}`
         }
       });
+
+      // 如果有分类信息，自动创建数据模板
+      if (categoryId) {
+        try {
+          console.log('🔄 自动创建数据模板...');
+          
+          // 检查模板标题是否重复
+          const existingTemplate = await prisma.cMSDataTemplate.findFirst({
+            where: {
+              title: {
+                equals: title.trim(), // 使用用户原始标题检查重复
+                mode: 'insensitive'
+              }
+            }
+          });
+          
+          if (!existingTemplate) {
+            const newTemplate = await prisma.cMSDataTemplate.create({
+              data: {
+                title: title, // 使用用户原始标题
+                categoryId, // 使用用户选择的分类
+                description: description, // 使用用户原始描述
+                imageUrl: imageUrl || null, // 使用用户上传的图片
+                iframeUrl: iframeUrl || null, // 使用用户提供的iframe链接
+                tags: [], // 模板不使用AI生成的标签，保持空数组
+                publishDate: new Date(),
+                createdBy: req.user.id
+              }
+            });
+            
+            console.log('✅ 数据模板创建成功:', newTemplate.id);
+            
+            // 记录模板创建日志
+            await prisma.cMSOperationLog.create({
+              data: {
+                userId: req.user.id,
+                action: 'AUTO_CREATE',
+                targetType: 'DATA_TEMPLATE',
+                targetId: newTemplate.id,
+                description: `自动创建数据模板: ${title}`
+              }
+            });
+          } else {
+            console.log('⚠️ 模板标题已存在，跳过模板创建');
+          }
+        } catch (templateError) {
+          console.error('❌ 自动创建模板失败:', templateError);
+          // 不影响主流程，只记录错误
+        }
+      }
     }
 
     res.status(201).json({

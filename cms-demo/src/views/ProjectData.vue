@@ -7,15 +7,28 @@
         <h2>{{ projectName || '项目数据管理' }}</h2>
       </div>
       <div class="header-right">
-        <el-button type="success" @click="handleAIGenerate">
+        <el-button 
+          type="success" 
+          @click="handleAIGenerate"
+          :loading="navigatingToAI"
+          :disabled="navigatingToAdd || aiGenerating || batchDeleting || batchCompleting"
+        >
           <el-icon><MagicStick /></el-icon>
           AI生成
         </el-button>
-        <el-button type="primary" @click="handleAdd">
+        <el-button 
+          type="primary" 
+          @click="handleAdd"
+          :loading="navigatingToAdd"
+          :disabled="navigatingToAI || aiGenerating || batchDeleting || batchCompleting"
+        >
           <el-icon><Plus /></el-icon>
           添加数据
         </el-button>
-        <el-button @click="handleAddFromTemplate">
+        <el-button 
+          @click="handleAddFromTemplate"
+          :disabled="navigatingToAI || navigatingToAdd || aiGenerating || batchDeleting || batchCompleting"
+        >
           <el-icon><Document /></el-icon>
           从模板创建
         </el-button>
@@ -83,10 +96,22 @@
         </el-table-column>
         <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="handleEdit(row)">
+            <el-button 
+              type="primary" 
+              size="small" 
+              @click="handleEdit(row)"
+              :loading="editingIds.has(row.id)"
+              :disabled="deletingIds.has(row.id) || batchDeleting || batchCompleting"
+            >
               编辑
             </el-button>
-            <el-button type="danger" size="small" @click="handleDelete(row)">
+            <el-button 
+              type="danger" 
+              size="small" 
+              @click="handleDelete(row)"
+              :loading="deletingIds.has(row.id)"
+              :disabled="editingIds.has(row.id) || batchDeleting || batchCompleting"
+            >
               删除
             </el-button>
           </template>
@@ -109,10 +134,20 @@
 
     <!-- 批量操作 -->
     <div v-if="selectedRows.length > 0" class="batch-actions">
-      <el-button type="danger" @click="handleBatchDelete">
+      <el-button 
+        type="danger" 
+        @click="handleBatchDelete"
+        :loading="batchDeleting"
+        :disabled="batchCompleting"
+      >
         批量删除 ({{ selectedRows.length }})
       </el-button>
-      <el-button type="success" @click="handleBatchComplete">
+      <el-button 
+        type="success" 
+        @click="handleBatchComplete"
+        :loading="batchCompleting"
+        :disabled="batchDeleting"
+      >
         批量完成 ({{ selectedRows.length }})
       </el-button>
     </div>
@@ -128,6 +163,29 @@
       :show-close="!aiGenerating"
     >
       <div class="template-selector">
+        <!-- 分类筛选区域 -->
+        <div class="template-filter">
+          <el-select 
+            v-model="selectedCategoryId" 
+            placeholder="选择分类筛选模板" 
+            @change="handleCategoryChange"
+            :loading="categoriesLoading"
+            clearable
+            style="width: 200px"
+          >
+            <el-option label="全部分类" value="" />
+            <el-option 
+              v-for="category in categories"
+              :key="category.id"
+              :label="category.name"
+              :value="category.id"
+            />
+          </el-select>
+          <el-text type="info" size="small" class="filter-tip">
+            选择分类可快速筛选相关模板
+          </el-text>
+        </div>
+        
         <div 
           v-loading="templatesLoading || aiGenerating" 
           :element-loading-text="aiGenerating ? 'AI生成中...' : '加载模板中...'"
@@ -190,7 +248,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Plus, Document, MagicStick, Picture } from '@element-plus/icons-vue'
-import { projectDataAPI, dataTemplateAPI, aiAPI } from '../api'
+import { projectDataAPI, dataTemplateAPI, aiAPI, categoryAPI } from '../api'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -205,6 +263,19 @@ const templates = ref([])
 const templateDialogVisible = ref(false)
 const aiGenerating = ref(false)
 const selectedTemplate = ref(null)
+
+// 分类相关状态
+const categories = ref([])
+const selectedCategoryId = ref('')
+const categoriesLoading = ref(false)
+
+// 各种操作的loading状态
+const editingIds = ref(new Set()) // 正在编辑的数据ID
+const deletingIds = ref(new Set()) // 正在删除的数据ID
+const batchDeleting = ref(false) // 批量删除loading
+const batchCompleting = ref(false) // 批量完成loading
+const navigatingToAI = ref(false) // 跳转到AI生成loading
+const navigatingToAdd = ref(false) // 跳转到添加数据loading
 
 // 项目信息
 const projectId = computed(() => route.params.projectId)
@@ -263,16 +334,34 @@ const fetchProjectData = async () => {
 }
 
 // 获取模板列表
-const fetchTemplates = async () => {
+const fetchTemplates = async (categoryId = '') => {
   templatesLoading.value = true
   try {
-    const response = await dataTemplateAPI.getTemplatesForProject({})
+    const params = {}
+    if (categoryId) {
+      params.categoryId = categoryId
+    }
+    const response = await dataTemplateAPI.getTemplatesForProject(params)
     templates.value = response.data.templates || []
   } catch (error) {
     console.error('获取模板列表失败:', error)
     ElMessage.error('获取模板列表失败')
   } finally {
     templatesLoading.value = false
+  }
+}
+
+// 获取分类列表
+const fetchCategories = async () => {
+  categoriesLoading.value = true
+  try {
+    const response = await categoryAPI.getCategories()
+    categories.value = response.data.categories || []
+  } catch (error) {
+    console.error('获取分类列表失败:', error)
+    ElMessage.error('获取分类列表失败')
+  } finally {
+    categoriesLoading.value = false
   }
 }
 
@@ -283,43 +372,69 @@ const handleGoBack = () => {
 
 // 处理AI生成
 const handleAIGenerate = () => {
-  router.push({ 
-    name: 'AIGenerateForm', 
-    params: { type: 'project' },
-    query: { projectId: projectId.value, projectName: projectName.value }
-  })
+  navigatingToAI.value = true
+  
+  setTimeout(() => {
+    router.push({ 
+      name: 'AIGenerateForm', 
+      params: { type: 'project' },
+      query: { projectId: projectId.value, projectName: projectName.value }
+    })
+    navigatingToAI.value = false
+  }, 200)
 }
 
 // 处理添加
 const handleAdd = () => {
-  router.push({ 
-    name: 'ProjectDataAdd',
-    params: { projectId: projectId.value },
-    query: { projectName: projectName.value }
-  })
+  navigatingToAdd.value = true
+  
+  setTimeout(() => {
+    router.push({ 
+      name: 'ProjectDataAdd',
+      params: { projectId: projectId.value },
+      query: { projectName: projectName.value }
+    })
+    navigatingToAdd.value = false
+  }, 200)
 }
 
 // 处理从模板创建
 const handleAddFromTemplate = () => {
   templateDialogVisible.value = true
-  fetchTemplates()
+  selectedCategoryId.value = '' // 重置分类选择
+  fetchCategories() // 获取分类列表
+  fetchTemplates() // 获取模板列表
+}
+
+// 处理分类筛选变化
+const handleCategoryChange = (categoryId) => {
+  selectedCategoryId.value = categoryId
+  fetchTemplates(categoryId)
 }
 
 // 处理编辑
 const handleEdit = (row) => {
-  router.push({ 
-    name: 'ProjectDataEdit',
-    params: { 
-      projectId: projectId.value,
-      id: row.id 
-    },
-    query: { projectName: projectName.value }
-  })
+  editingIds.value.add(row.id)
+  
+  // 添加短暂延迟，让用户看到loading状态
+  setTimeout(() => {
+    router.push({ 
+      name: 'ProjectDataEdit',
+      params: { 
+        projectId: projectId.value,
+        id: row.id 
+      },
+      query: { projectName: projectName.value }
+    })
+    editingIds.value.delete(row.id)
+  }, 200)
 }
 
 
 // 处理删除
 const handleDelete = async (row) => {
+  if (deletingIds.value.has(row.id)) return // 防止重复点击
+  
   try {
     await ElMessageBox.confirm(
       `确定要删除这条数据吗？`,
@@ -330,6 +445,8 @@ const handleDelete = async (row) => {
         type: 'warning'
       }
     )
+    
+    deletingIds.value.add(row.id)
     
     const loadingMessage = ElMessage({
       message: '正在删除数据...',
@@ -351,11 +468,15 @@ const handleDelete = async (row) => {
       console.error('删除失败:', error)
       ElMessage.error('删除失败')
     }
+  } finally {
+    deletingIds.value.delete(row.id)
   }
 }
 
 // 处理批量删除
 const handleBatchDelete = async () => {
+  if (batchDeleting.value) return // 防止重复点击
+  
   try {
     await ElMessageBox.confirm(
       `确定要删除选中的 ${selectedRows.value.length} 条数据吗？`,
@@ -366,6 +487,8 @@ const handleBatchDelete = async () => {
         type: 'warning'
       }
     )
+    
+    batchDeleting.value = true
     
     const loadingMessage = ElMessage({
       message: `正在删除 ${selectedRows.value.length} 条数据...`,
@@ -390,11 +513,15 @@ const handleBatchDelete = async () => {
       console.error('批量删除失败:', error)
       ElMessage.error('批量删除失败')
     }
+  } finally {
+    batchDeleting.value = false
   }
 }
 
 // 处理批量完成
 const handleBatchComplete = async () => {
+  if (batchCompleting.value) return // 防止重复点击
+  
   try {
     const incompleteRows = selectedRows.value.filter(row => !row.isCompleted)
     
@@ -403,15 +530,23 @@ const handleBatchComplete = async () => {
       return
     }
     
-    const promises = incompleteRows.map(row => projectDataAPI.markAsCompleted(row.id))
-    await Promise.all(promises)
+    batchCompleting.value = true
     
-    ElMessage.success('批量标记完成成功')
-    selectedRows.value = []
-    fetchProjectData()
+    try {
+      const promises = incompleteRows.map(row => projectDataAPI.markAsCompleted(row.id))
+      await Promise.all(promises)
+      
+      ElMessage.success('批量标记完成成功')
+      selectedRows.value = []
+      fetchProjectData()
+    } catch (completeError) {
+      throw completeError
+    }
   } catch (error) {
     console.error('批量完成失败:', error)
     ElMessage.error('批量完成失败')
+  } finally {
+    batchCompleting.value = false
   }
 }
 
@@ -488,6 +623,36 @@ const handleCreateFromTemplate = async () => {
       ElMessage.error('选中的模板缺少iframe链接，无法创建项目数据')
       aiGenerating.value = false
       return
+    }
+
+    // 检查项目内标题是否重复
+    if (selectedTemplate.value?.title) {
+      try {
+        const projectDuplicateResponse = await projectDataAPI.checkDuplicateInProject(projectId.value, selectedTemplate.value.title)
+        if (projectDuplicateResponse.data.isDuplicate) {
+          const existingData = projectDuplicateResponse.data.existingData
+          await ElMessageBox.confirm(
+            `模板标题"${selectedTemplate.value.title}"在当前项目中已存在！\n\n` +
+            `现有数据信息：\n` +
+            `创建者：${existingData.creator}\n` +
+            `创建时间：${new Date(existingData.createdAt).toLocaleString()}\n\n` +
+            `是否仍要继续创建？这将创建重复的项目数据。`,
+            '项目内标题重复',
+            {
+              confirmButtonText: '继续创建',
+              cancelButtonText: '取消',
+              type: 'warning'
+            }
+          )
+        }
+      } catch (duplicateError) {
+        if (duplicateError === 'cancel') {
+          aiGenerating.value = false
+          return // 用户取消
+        }
+        console.error('检查重复失败:', duplicateError)
+        // 继续执行，不阻断流程
+      }
     }
 
     // 调用AI生成接口，基于选中的模板生成项目数据
@@ -605,8 +770,22 @@ onMounted(() => {
 }
 
 .template-selector {
-  max-height: 400px;
+  max-height: 500px;
   overflow-y: auto;
+}
+
+.template-filter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.filter-tip {
+  color: #909399;
+  font-size: 12px;
 }
 
 .template-card {
@@ -699,8 +878,7 @@ onMounted(() => {
 }
 
 .template-image {
-  width: 100%;
-  height: 80px;
+  aspect-ratio: 1/1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -797,6 +975,17 @@ onMounted(() => {
   
   .project-data-page {
     padding: 12px;
+  }
+  
+  .template-filter {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px 0;
+  }
+  
+  .template-filter .el-select {
+    width: 100% !important;
   }
   
   .template-grid {

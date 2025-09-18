@@ -388,4 +388,51 @@ router.get('/bulk/for-project', authenticateToken, async (req, res) => {
   }
 });
 
+// 检查模板标题是否重复
+router.get('/check-duplicate/:title', authenticateToken, requireUser, async (req, res) => {
+  try {
+    const { title } = req.params;
+    
+    if (!title || title.trim() === '') {
+      return res.status(400).json({ error: '标题不能为空' });
+    }
+    
+    const existingTemplate = await prisma.cMSDataTemplate.findFirst({
+      where: {
+        title: {
+          equals: title.trim(),
+          mode: 'insensitive' // 不区分大小写
+        }
+      },
+      select: {
+        id: true,
+        title: true,
+        category: {
+          select: {
+            name: true
+          }
+        },
+        createdAt: true
+      }
+    });
+    
+    if (existingTemplate) {
+      return res.json({
+        isDuplicate: true,
+        existingTemplate: {
+          id: existingTemplate.id,
+          title: existingTemplate.title,
+          categoryName: existingTemplate.category?.name || '未分类',
+          createdAt: existingTemplate.createdAt
+        }
+      });
+    }
+    
+    res.json({ isDuplicate: false });
+  } catch (error) {
+    console.error('检查模板重复失败:', error);
+    res.status(500).json({ error: '检查模板重复失败' });
+  }
+});
+
 export default router;

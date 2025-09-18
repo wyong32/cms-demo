@@ -49,10 +49,6 @@
         </el-form-item>
       </el-form>
       
-      <div class="login-footer">
-        <p>默认管理员账户</p>
-        <p>用户名: <code>admin</code> 密码: <code>wanghuan1235789</code></p>
-      </div>
     </div>
   </div>
 </template>

@@ -164,7 +164,7 @@
               </div>
             </div>
             <div class="image-type-badge" :class="`type-${image.type}`">
-              {{ image.type === 'template' ? '模板' : '项目' }}
+              {{ getImageTypeLabel(image.type) }}
             </div>
           </div>
           <div class="image-info">
@@ -292,6 +292,19 @@ const paginatedImages = computed(() => {
 })
 
 // 方法
+const getImageTypeLabel = (type) => {
+  switch (type) {
+    case 'template':
+      return '模板'
+    case 'project':
+      return '项目'
+    case 'project-richtext':
+      return '富文本'
+    default:
+      return '其他'
+  }
+}
+
 const fetchImages = async () => {
   try {
     loading.value = true
@@ -691,6 +704,10 @@ onMounted(() => {
 
 .type-project {
   background: #e6a23c;
+}
+
+.type-project-richtext {
+  background: #409eff;
 }
 
 .pagination-container {

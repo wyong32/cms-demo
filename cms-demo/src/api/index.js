@@ -63,7 +63,10 @@ export const templateAPI = {
   deleteTemplate: (id) => api.delete(`/templates/${id}`),
   
   // 获取用于项目选择的模板列表
-  getTemplatesForProject: (params) => api.get('/templates/bulk/for-project', { params })
+  getTemplatesForProject: (params) => api.get('/templates/bulk/for-project', { params }),
+  
+  // 检查模板标题是否重复
+  checkDuplicate: (title) => api.get(`/templates/check-duplicate/${encodeURIComponent(title)}`)
 }
 
 // 数据模板相关API（别名）
@@ -114,7 +117,10 @@ export const projectDataAPI = {
   deleteProjectData: (id) => api.delete(`/project-data/${id}`),
   
   // 生成JS代码片段
-  generateCode: (id) => api.get(`/project-data/${id}/generate-code`)
+  generateCode: (id) => api.get(`/project-data/${id}/generate-code`),
+  
+  // 检查项目内标题是否重复
+  checkDuplicateInProject: (projectId, title) => api.get(`/project-data/check-duplicate/${projectId}/${encodeURIComponent(title)}`)
 }
 
 // 日志相关API

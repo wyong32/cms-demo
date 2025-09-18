@@ -225,13 +225,23 @@ router.get('/images/used', authenticateToken, async (req, res) => {
       }
     });
     
-    // 获取项目数据中的图片
+    // 获取项目数据中的图片（包含主图片和富文本图片）
     const projectData = await prisma.cMSProjectData.findMany({
       where: {
-        data: {
-          path: ['imageUrl'],
-          not: null
-        }
+        OR: [
+          {
+            data: {
+              path: ['imageUrl'],
+              not: null
+            }
+          },
+          {
+            data: {
+              path: ['richTextImages'],
+              not: null
+            }
+          }
+        ]
       },
       include: {
         project: {
@@ -266,6 +276,7 @@ router.get('/images/used', authenticateToken, async (req, res) => {
     // 处理项目数据图片
     const projectImages = [];
     projectData.forEach(data => {
+      // 处理主图片
       const imageUrl = data.data.imageUrl;
       if (imageUrl) {
         projectImages.push({
@@ -279,6 +290,27 @@ router.get('/images/used', authenticateToken, async (req, res) => {
           projectName: data.project?.name || '未知项目',
           createdAt: data.createdAt,
           source: `项目: ${data.project?.name || '未知项目'}`
+        });
+      }
+      
+      // 处理富文本编辑器中的图片
+      if (data.data.richTextImages && Array.isArray(data.data.richTextImages)) {
+        data.data.richTextImages.forEach((richTextImage, index) => {
+          const richTextImageItem = {
+            id: `${data.id}-richtext-${index}`,
+            type: 'project-richtext',
+            title: `${data.data.title || '未命名'} - 富文本图片`,
+            imageUrl: richTextImage.url,
+            imageAlt: richTextImage.alt || '',
+            imageWidth: richTextImage.width || '',
+            categoryName: data.category?.name || '未分类',
+            categoryType: data.category?.type || '其他',
+            projectName: data.project?.name || '未知项目',
+            createdAt: richTextImage.insertedAt || data.createdAt,
+            source: `项目富文本: ${data.project?.name || '未知项目'}`
+          };
+          
+          projectImages.push(richTextImageItem);
         });
       }
     });

@@ -180,6 +180,8 @@ router.post('/', authenticateToken, requireUser, validateRequired(['projectId', 
 
     // 验证和清理数据
     const cleanedData = {};
+    
+    // 处理项目定义的字段
     for (const field of project.fields) {
       const value = data[field.fieldName];
       
@@ -191,6 +193,14 @@ router.post('/', authenticateToken, requireUser, validateRequired(['projectId', 
         }
       }
     }
+    
+    // 保留特殊字段（如富文本图片信息）
+    const specialFields = ['richTextImages', '_hasNewRichTextImages'];
+    specialFields.forEach(fieldName => {
+      if (data[fieldName] !== undefined) {
+        cleanedData[fieldName] = data[fieldName];
+      }
+    });
 
     const projectData = await prisma.cMSProjectData.create({
       data: {
@@ -232,6 +242,56 @@ router.post('/', authenticateToken, requireUser, validateRequired(['projectId', 
         description: `在项目 "${project.name}" 中创建了新数据`
       }
     });
+
+    // 如果有分类信息，自动创建数据模板
+    if (categoryId && cleanedData.title) {
+      try {
+        console.log('🔄 自动创建数据模板...');
+        
+        // 检查模板标题是否重复
+        const existingTemplate = await prisma.cMSDataTemplate.findFirst({
+          where: {
+            title: {
+              equals: cleanedData.title.trim(),
+              mode: 'insensitive'
+            }
+          }
+        });
+        
+        if (!existingTemplate) {
+          const newTemplate = await prisma.cMSDataTemplate.create({
+            data: {
+              title: cleanedData.title, // 使用用户原始标题
+              categoryId, // 使用用户选择的分类
+              description: cleanedData.description || null, // 使用用户填写的原始描述
+              imageUrl: cleanedData.imageUrl || null, // 使用用户上传的图片
+              iframeUrl: cleanedData.iframeUrl || null, // 使用用户提供的iframe链接
+              tags: [], // 模板不使用用户填写的标签，保持空数组供AI生成
+              publishDate: new Date(),
+              createdBy: req.user.id
+            }
+          });
+          
+          console.log('✅ 数据模板创建成功:', newTemplate.id);
+          
+          // 记录模板创建日志
+          await prisma.cMSOperationLog.create({
+            data: {
+              userId: req.user.id,
+              action: 'AUTO_CREATE',
+              targetType: 'DATA_TEMPLATE',
+              targetId: newTemplate.id,
+              description: `自动创建数据模板: ${cleanedData.title}`
+            }
+          });
+        } else {
+          console.log('⚠️ 模板标题已存在，跳过模板创建');
+        }
+      } catch (templateError) {
+        console.error('❌ 自动创建模板失败:', templateError);
+        // 不影响主流程，只记录错误
+      }
+    }
 
     res.status(201).json({
       message: '项目数据创建成功',
@@ -405,6 +465,8 @@ router.put('/:id', authenticateToken, requireUser, async (req, res) => {
 
       // 验证和清理数据
       const cleanedData = {};
+      
+      // 处理项目定义的字段
       for (const field of existingData.project.fields) {
         const value = data[field.fieldName];
         
@@ -416,6 +478,14 @@ router.put('/:id', authenticateToken, requireUser, async (req, res) => {
           }
         }
       }
+      
+      // 保留特殊字段（如富文本图片信息）
+      const specialFields = ['richTextImages', '_hasNewRichTextImages'];
+      specialFields.forEach(fieldName => {
+        if (data[fieldName] !== undefined) {
+          cleanedData[fieldName] = data[fieldName];
+        }
+      });
 
       updateData.data = cleanedData;
     }
@@ -634,6 +704,54 @@ router.get('/:id/generate-code', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('生成JS代码失败:', error);
     res.status(500).json({ error: '生成JS代码失败' });
+  }
+});
+
+// 检查项目内标题是否重复
+router.get('/check-duplicate/:projectId/:title', authenticateToken, requireUser, async (req, res) => {
+  try {
+    const { projectId, title } = req.params;
+    
+    if (!title || title.trim() === '') {
+      return res.status(400).json({ error: '标题不能为空' });
+    }
+    
+    const existingProjectData = await prisma.cMSProjectData.findFirst({
+      where: {
+        projectId,
+        data: {
+          path: ['title'],
+          string_contains: title.trim()
+        }
+      },
+      select: {
+        id: true,
+        data: true,
+        createdAt: true,
+        creator: {
+          select: {
+            username: true
+          }
+        }
+      }
+    });
+    
+    if (existingProjectData) {
+      return res.json({
+        isDuplicate: true,
+        existingData: {
+          id: existingProjectData.id,
+          title: existingProjectData.data.title,
+          creator: existingProjectData.creator?.username || '未知',
+          createdAt: existingProjectData.createdAt
+        }
+      });
+    }
+    
+    res.json({ isDuplicate: false });
+  } catch (error) {
+    console.error('检查项目数据重复失败:', error);
+    res.status(500).json({ error: '检查项目数据重复失败' });
   }
 });
 

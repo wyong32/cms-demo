@@ -7,8 +7,21 @@
         <h2>{{ isEdit ? '编辑项目数据' : '添加项目数据' }}</h2>
       </div>
       <div class="header-right">
-        <el-button @click="handleReset" v-if="!readonly">重置</el-button>
-        <el-button type="primary" @click="handleSave" :loading="saving" v-if="!readonly">
+        <el-button 
+          @click="handleReset" 
+          v-if="!readonly"
+          :loading="resetting"
+          :disabled="saving || navigatingBack"
+        >
+          重置
+        </el-button>
+        <el-button 
+          type="primary" 
+          @click="handleSave" 
+          :loading="saving" 
+          v-if="!readonly"
+          :disabled="resetting || navigatingBack"
+        >
           保存
         </el-button>
       </div>
@@ -26,9 +39,26 @@
         <div class="form-section">
           <h3>基本信息</h3>
           <el-row :gutter="20">
-            <el-col :span="24">
+            <el-col :span="12">
               <el-form-item label="项目" prop="projectName">
                 <el-input :value="projectName" disabled />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="分类" prop="categoryId" required>
+                <el-select v-model="form.categoryId" placeholder="请选择分类" style="width: 100%">
+                  <el-option
+                    v-for="category in categories"
+                    :key="category.id"
+                    :label="category.name"
+                    :value="category.id"
+                  />
+                </el-select>
+                <div class="category-tip">
+                  <el-text type="info" size="small">
+                    选择分类后，该数据会自动添加到对应分类的数据模板中
+                  </el-text>
+                </div>
               </el-form-item>
             </el-col>
           </el-row>
@@ -253,6 +283,9 @@
                     :placeholder="`请输入${getFieldLabel(field)}`"
                     height="400px"
                     :disabled="readonly"
+                    :project-info="{ id: projectId, name: projectName }"
+                    :category-info="form.categoryId ? categories.find(c => c.id === form.categoryId) || null : null"
+                    @imageInserted="handleRichTextImageInserted"
                   />
                 </el-form-item>
                 
@@ -350,9 +383,9 @@
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Plus } from '@element-plus/icons-vue'
-import { projectDataAPI, projectAPI, templateAPI } from '../api'
+import { projectDataAPI, projectAPI, templateAPI, categoryAPI, dataTemplateAPI } from '../api'
 import { useAuthStore } from '../stores/counter'
 import RichTextEditor from '../components/RichTextEditor.vue'
 
@@ -364,7 +397,10 @@ const formRef = ref()
 const uploadRef = ref()
 const saving = ref(false)
 const loading = ref(true)
+const resetting = ref(false)
+const navigatingBack = ref(false)
 const projectFields = ref([])
+const categories = ref([])
 const previewDialogVisible = ref(false)
 const previewUrl = ref('')
 
@@ -389,6 +425,7 @@ const templateCategoryId = computed(() => route.query.categoryId)
 
 // 表单数据
 const form = reactive({
+  categoryId: '', // 分类ID
   data: {}
 })
 
@@ -433,7 +470,12 @@ const otherFields = computed(() => {
 
 // 动态生成验证规则
 const rules = computed(() => {
-  const dynamicRules = {}
+  const dynamicRules = {
+    // 分类验证规则
+    categoryId: [
+      { required: true, message: '请选择分类', trigger: 'change' }
+    ]
+  }
   
   projectFields.value.forEach(field => {
     if (field.isRequired) {
@@ -582,6 +624,17 @@ const handlePreviewIframe = () => {
   previewDialogVisible.value = true
 }
 
+// 获取分类列表
+const fetchCategories = async () => {
+  try {
+    const response = await categoryAPI.getCategories()
+    categories.value = response.data.categories || []
+  } catch (error) {
+    console.error('获取分类失败:', error)
+    ElMessage.error('获取分类失败')
+  }
+}
+
 // 获取项目信息
 const fetchProject = async () => {
   try {
@@ -597,6 +650,9 @@ const fetchProject = async () => {
     
     // 只在非编辑模式下初始化表单数据
     if (!isEdit.value) {
+      // 保存已有的richTextImages（如果存在）
+      const existingRichTextImages = form.data.richTextImages || []
+      
       // 初始化表单数据
       project.fields.forEach(field => {
         if (field.fieldType === 'ARRAY') {
@@ -605,6 +661,12 @@ const fetchProject = async () => {
           form.data[field.fieldName] = ''
         }
       })
+      
+      // 恢复richTextImages
+      if (existingRichTextImages.length > 0) {
+        form.data.richTextImages = existingRichTextImages
+        console.log('🔧 在fetchProject中恢复richTextImages:', existingRichTextImages)
+      }
       
       if (import.meta.env.DEV) {
         console.log('初始化后的表单数据:', form.data)
@@ -696,8 +758,22 @@ const fetchProjectData = async (id) => {
       }
     })
     
+    // 保存当前的richTextImages（如果存在）
+    const existingRichTextImages = form.data.richTextImages || []
+    
     // 然后填充实际数据
     form.data = { ...form.data, ...projectData.data }
+    
+    // 设置分类ID（从项目数据中获取）
+    form.categoryId = projectData.categoryId || ''
+    
+    // 恢复richTextImages，合并已有的和新插入的
+    if (existingRichTextImages.length > 0) {
+      form.data.richTextImages = [
+        ...(form.data.richTextImages || []),
+        ...existingRichTextImages
+      ]
+    }
     
     if (import.meta.env.DEV) {
       console.log('加载的项目数据:', projectData.data)
@@ -718,19 +794,87 @@ const handleSave = async () => {
   try {
     await formRef.value.validate()
     
+    // 检查标题重复（仅在新建时检查）
+    if (!isEdit.value && form.data.title) {
+      try {
+        // 1. 检查项目内是否重复
+        const projectDuplicateResponse = await projectDataAPI.checkDuplicateInProject(projectId.value, form.data.title)
+        if (projectDuplicateResponse.data.isDuplicate) {
+          const existingData = projectDuplicateResponse.data.existingData
+          await ElMessageBox.confirm(
+            `标题"${form.data.title}"在当前项目中已存在！\n\n` +
+            `现有数据信息：\n` +
+            `创建者：${existingData.creator}\n` +
+            `创建时间：${new Date(existingData.createdAt).toLocaleString()}\n\n` +
+            `是否仍要继续保存？这将创建重复的项目数据。`,
+            '项目内标题重复',
+            {
+              confirmButtonText: '继续保存',
+              cancelButtonText: '取消',
+              type: 'warning'
+            }
+          )
+        }
+        
+        // 2. 如果有分类，检查数据模板中是否重复
+        if (form.categoryId) {
+          const templateDuplicateResponse = await dataTemplateAPI.checkDuplicate(form.data.title)
+          if (templateDuplicateResponse.data.isDuplicate) {
+            const existingTemplate = templateDuplicateResponse.data.existingTemplate
+            await ElMessageBox.confirm(
+              `标题"${form.data.title}"已存在于数据模板中！\n\n` +
+              `现有模板信息：\n` +
+              `分类：${existingTemplate.categoryName}\n` +
+              `创建时间：${new Date(existingTemplate.createdAt).toLocaleString()}\n\n` +
+              `是否仍要继续保存？这将创建项目数据，但不会创建新的模板。`,
+              '模板标题重复',
+              {
+                confirmButtonText: '继续保存',
+                cancelButtonText: '取消',
+                type: 'warning'
+              }
+            )
+          }
+        }
+      } catch (duplicateError) {
+        if (duplicateError === 'cancel') {
+          return // 用户取消
+        }
+        console.error('检查重复失败:', duplicateError)
+        // 继续执行，不阻断流程
+      }
+    }
+    
     saving.value = true
+    
+    // 扫描HTML内容中的所有图片，重新生成richTextImages数组
+    const detailsHtml = form.data.detailsHtml || ''
+    const extractedImages = extractRichTextImages(detailsHtml)
+    
+    // 重新设置richTextImages数组（不累积，每次都重新扫描）
+    form.data.richTextImages = extractedImages
+    
+    
+    // 确保categoryId是字符串类型
+    let categoryId = form.categoryId
+    if (Array.isArray(categoryId)) {
+      console.warn('⚠️ categoryId意外变成了数组，取第一个值:', categoryId)
+      categoryId = categoryId.length > 0 ? categoryId[0] : null
+    }
     
     const submitData = {
       projectId: projectId.value,
+      categoryId: categoryId || null, // 添加分类ID
       data: form.data
     }
+    
     
     if (isEdit.value) {
       await projectDataAPI.updateProjectData(route.params.id, submitData)
       ElMessage.success('更新成功')
     } else {
       await projectDataAPI.createProjectData(submitData)
-      ElMessage.success('创建成功')
+      ElMessage.success('创建成功，已自动添加到数据模板')
     }
     
     router.push({ 
@@ -783,10 +927,50 @@ const handleGoBack = () => {
   })
 }
 
+// 从HTML内容中提取所有图片信息
+const extractRichTextImages = (htmlContent) => {
+  if (!htmlContent) return []
+  
+  const images = []
+  
+  // 创建临时DOM来解析HTML
+  const tempDiv = document.createElement('div')
+  tempDiv.innerHTML = htmlContent
+  
+  // 找到所有img标签
+  const imgElements = tempDiv.querySelectorAll('img')
+  
+  imgElements.forEach((img, index) => {
+    // 只处理上传到我们系统的图片（Cloudinary或本地上传）
+    const src = img.src
+    if (src && (src.includes('cloudinary.com') || src.includes('/api/uploads/'))) {
+      images.push({
+        url: src,
+        alt: img.alt || '',
+        width: img.style.width || img.getAttribute('width') || '',
+        insertedAt: new Date().toISOString(),
+        fieldName: 'detailsHtml',
+        projectId: projectId.value,
+        projectName: projectName.value,
+        index: index // 用于去重
+      })
+    }
+  })
+  
+  return images
+}
+
+// 处理富文本编辑器中插入的图片
+const handleRichTextImageInserted = (imageInfo) => {
+  // 提示用户需要保存才能在图片管理中看到
+  ElMessage.info('图片已插入，保存后将出现在图片管理中')
+}
+
 // 页面加载时获取数据
 onMounted(async () => {
   try {
     loading.value = true
+    
     
     if (import.meta.env.DEV) {
       console.log('页面加载，路由参数:', {
@@ -799,9 +983,19 @@ onMounted(async () => {
     }
     
     await fetchProject()
+    await fetchCategories()
     
     if (isEdit.value) {
       await fetchProjectData(route.params.id)
+    } else {
+      // 如果是从模板创建，设置分类ID
+      if (templateCategoryId.value) {
+        // 确保categoryId是字符串，防止路由参数被解析为数组
+        const categoryIdValue = Array.isArray(templateCategoryId.value) 
+          ? templateCategoryId.value[0] 
+          : templateCategoryId.value
+        form.categoryId = categoryIdValue
+      }
     }
     
     // 页面加载完成后清除验证
@@ -1014,6 +1208,10 @@ onMounted(async () => {
 .html-preview :deep(li) {
   margin: 4px 0;
   color: #606266;
+}
+
+.category-tip {
+  margin-top: 8px;
 }
 
 /* 响应式样式 */

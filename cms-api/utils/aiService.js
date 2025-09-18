@@ -122,11 +122,19 @@ class AIService {
   // Gemini实现
   async generateWithGemini({ title, description, imageUrl, iframeUrl, options, categoryInfo }) {
     try {
+      console.log('🔍 Gemini服务诊断:');
+      console.log('   - Provider:', this.provider);
+      console.log('   - Client exists:', !!this.client);
+      console.log('   - API Key exists:', !!process.env.GOOGLE_API_KEY);
+      console.log('   - API Key prefix:', process.env.GOOGLE_API_KEY ? process.env.GOOGLE_API_KEY.substring(0, 10) + '...' : 'N/A');
+      
       if (!this.client) {
-        console.log('🎭 模拟模式: Gemini客户端未初始化，使用模拟数据');
+        console.log('❌ 关键问题: Gemini客户端未初始化，使用模拟数据');
+        console.log('💡 解决方案: 检查环境变量AI_PROVIDER和GOOGLE_API_KEY是否正确设置');
         return this.generateMockContent({ title, description, imageUrl, iframeUrl, options, categoryInfo });
       }
 
+      // 使用稳定的模型
       const model = this.client.getGenerativeModel({ model: 'gemini-1.5-flash' });
       const prompt = this.buildGeminiPrompt({ title, description, imageUrl, iframeUrl, options, categoryInfo });
 
@@ -173,6 +181,26 @@ class AIService {
       }
     } catch (error) {
       console.error('❌ 错误: Gemini API调用失败:', error.message);
+      console.error('❌ 错误详情:', error);
+      console.log('🔍 错误类型分析:');
+      
+      if (error.message.includes('API_KEY_INVALID')) {
+        console.log('   - 问题: API密钥无效');
+        console.log('   - 解决方案: 检查GOOGLE_API_KEY是否正确');
+      } else if (error.message.includes('PERMISSION_DENIED')) {
+        console.log('   - 问题: API权限被拒绝');
+        console.log('   - 解决方案: 检查API密钥权限设置');
+      } else if (error.message.includes('QUOTA_EXCEEDED')) {
+        console.log('   - 问题: API配额已用完');
+        console.log('   - 解决方案: 检查API使用限制或升级账户');
+      } else if (error.message.includes('models/gemini-1.5-flash')) {
+        console.log('   - 问题: 模型不可用');
+        console.log('   - 解决方案: 尝试使用其他模型如gemini-pro');
+      } else {
+        console.log('   - 问题: 未知错误');
+        console.log('   - 建议: 检查网络连接和API服务状态');
+      }
+      
       console.log('🎭 备用方案: 切换到模拟模式处理此次请求');
       // 如果API调用失败，返回模拟数据
       return this.generateMockContent({ title, description, imageUrl, iframeUrl, options });
@@ -321,7 +349,7 @@ Return format:
     prompt += `
 
 要求：
-1. 优化标题使其更具吸引力，包含目标关键词，根据内容类型选择合适的词汇风格
+1. 保持用户提供的标题不变，不要修改标题内容
 2. 创建简要描述（最多300字符）用于表单显示，要基于用户描述进行重新组织和扩展，不要直接复制
 3. 根据内容类型提取相关关键词作为标签（如：新闻类用时事词汇，技术类用专业术语，娱乐类用流行词汇）
 4. 生成合适的图片alt文本，包含目标关键词，描述要生动具体且符合内容类型
@@ -391,21 +419,21 @@ Return format:
 
 请直接返回JSON格式，不要任何解释文字：
 {
-  "title": "优化的英文标题（包含目标关键词）",
+  "title": "${title}",
   "description": "简要英文描述（最多300字符）",
   "tags": ["english-tag1", "english-tag2"],
   "imageAlt": "英文图片描述（包含目标关键词）"`;
 
     if (options.includes('autoSEO')) {
       prompt += `,
-  "seoTitle": "SEO英文标题（包含目标关键词）",
+  "seoTitle": "基于原标题'${title}'优化的SEO标题",
   "seoDescription": "SEO英文描述（包含目标关键词）",
   "seoKeywords": "英文关键词（包含目标关键词）"`;
     }
 
     if (options.includes('autoContent')) {
       prompt += `,
-  "detailsHtml": "<div style=\\"font-family: Arial, sans-serif; line-height: 1.6; color: #333;\\"><h2>${title}</h2><p>详细的AI生成引言内容，至少100字符，要吸引人且有价值，包含关键词</p><h3>About</h3><p>深入详细的AI生成介绍，至少200字符，要专业且全面，详细阐述主题内容</p><h3>Features</h3><ul><li>详细的AI生成特点1，要具体描述功能和优势</li><li>详细的AI生成特点2，要具体描述功能和优势</li><li>详细的AI生成特点3，要具体描述功能和优势</li><li>更多详细的AI生成特点，至少5-8个</li></ul><h3>FAQ</h3><ul><li><div class=\\"faq-question\\">AI生成的问题1</div><div class=\\"faq-answer\\">AI生成的详细答案1</div></li><li><div class=\\"faq-question\\">AI生成的问题2</div><div class=\\"faq-answer\\">AI生成的详细答案2</div></li><li><div class=\\"faq-question\\">AI生成的问题3</div><div class=\\"faq-answer\\">AI生成的详细答案3</div></li><li>更多问答格式的FAQ，至少4-6个</li></ul><p>详细的AI生成总结内容，至少100字符，要有价值且完整，总结所有要点</p></div>（总字符数必须≥1000）"`;
+  "detailsHtml": "<div style=\\"font-family: Arial, sans-serif; line-height: 1.6; color: #333;\\"><h2>${title}</h2><p>详细的AI生成引言内容，至少100字符，要吸引人且有价值，包含关键词</p><h3>About</h3><p>深入详细的AI生成介绍，至少200字符，要专业且全面，详细阐述主题内容</p><h3>Features</h3><ul><li>详细的AI生成特点1，要具体描述功能和优势</li><li>详细的AI生成特点2，要具体描述功能和优势</li><li>详细的AI生成特点3，要具体描述功能和优势</li><li>更多详细的AI生成特点，至少5-8个</li></ul><h3>FAQ</h3><ul><li><div class=\\"faq-question\\">AI生成的问题1</div><div class=\\"faq-answer\\">AI生成的详细答案1</div></li><li><div class=\\"faq-question\\">AI生成的问题2</div><div class=\\"faq-answer\\">AI生成的详细答案2</div></li><li><div class=\\"faq-question\\">AI生成的问题3</div><div class=\\"faq-answer\\">AI生成的详细答案3</div></li><li>更多问答格式的FAQ，至少4-6个</li></ul><p>详细的AI生成总结内容，至少100字符，要有价值且完整，总结所有要点</p></div>（总字符数必须≥1000，标题必须使用'${title}'不变）"`;
     }
 
     if (options.includes('autoStructure')) {
