@@ -158,9 +158,6 @@
                 <el-button size="small" type="primary" @click.stop="viewSource(image)">
                   <el-icon><Link /></el-icon>
                 </el-button>
-                <el-button size="small" type="danger" @click.stop="deleteImage(image)">
-                  <el-icon><Delete /></el-icon>
-                </el-button>
               </div>
             </div>
             <div class="image-type-badge" :class="`type-${image.type}`">
@@ -229,9 +226,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Picture, FolderOpened, Search, View, Delete, Refresh, Document, Collection, Folder, Link } from '@element-plus/icons-vue'
-import { uploadAPI, templateAPI, projectDataAPI } from '../api'
+import { ElMessage } from 'element-plus'
+import { Picture, FolderOpened, Search, View, Refresh, Document, Collection, Folder, Link } from '@element-plus/icons-vue'
+import { uploadAPI } from '../api'
 
 const router = useRouter()
 
@@ -409,50 +406,6 @@ const handlePreviewClose = () => {
 }
 
 // 删除图片
-const deleteImage = async (image) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除图片 "${image.title}" 吗？此操作将同时删除相关的数据模板或项目数据。`,
-      '删除确认',
-      {
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-
-    const loadingMessage = ElMessage({
-      message: `正在删除图片"${image.title}"...`,
-      type: 'info',
-      duration: 0 // 不自动关闭
-    })
-
-    try {
-      // 根据图片类型删除对应的数据
-      if (image.type === 'template') {
-        // 删除数据模板
-        await templateAPI.deleteTemplate(image.sourceId)
-      } else if (image.type === 'project') {
-        // 删除项目数据
-        await projectDataAPI.deleteProjectData(image.sourceId)
-      }
-
-      loadingMessage.close()
-      ElMessage.success('删除成功')
-      
-      // 刷新图片列表
-      await fetchImages()
-    } catch (deleteError) {
-      loadingMessage.close()
-      throw deleteError
-    }
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('删除图片失败:', error)
-      ElMessage.error('删除失败，请稍后重试')
-    }
-  }
-}
 
 const formatDate = (dateString) => {
   return new Date(dateString).toLocaleString('zh-CN')
