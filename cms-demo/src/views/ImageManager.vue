@@ -559,8 +559,7 @@ onMounted(() => {
 
 .image-container {
   position: relative;
-  width: 100%;
-  height: 150px;
+  aspect-ratio: 1/1;
   overflow: hidden;
 }
 
