@@ -871,7 +871,7 @@ const handleSave = async () => {
     
     if (isEdit.value) {
       await projectDataAPI.updateProjectData(route.params.id, submitData)
-      ElMessage.success('更新成功')
+      ElMessage.success('更新成功，状态已重置为未完成')
     } else {
       await projectDataAPI.createProjectData(submitData)
       ElMessage.success('创建成功，已自动添加到数据模板')

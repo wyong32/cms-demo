@@ -488,6 +488,9 @@ router.put('/:id', authenticateToken, requireUser, async (req, res) => {
       });
 
       updateData.data = cleanedData;
+      
+      // 🔧 修复业务逻辑：用户编辑数据时，自动重置为未完成状态
+      updateData.isCompleted = false;
     }
 
     const updatedProjectData = await prisma.cMSProjectData.update({
@@ -523,7 +526,7 @@ router.put('/:id', authenticateToken, requireUser, async (req, res) => {
         action: 'UPDATE',
         targetType: 'PROJECT_DATA',
         targetId: id,
-        description: `更新了项目 "${existingData.project.name}" 中的数据`
+        description: `更新了项目 "${existingData.project.name}" 中的数据${data ? '（状态重置为未完成）' : ''}`
       }
     });
 
