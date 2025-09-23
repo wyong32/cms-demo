@@ -78,7 +78,7 @@
             <!-- 如果从项目页面进入，显示只读的项目信息 -->
             <div v-if="route.query.projectId" class="selected-project-info">
               <el-input 
-                :value="route.query.projectName || `项目 ID: ${route.query.projectId}`" 
+                :value="projectInfo?.name || route.query.projectName || `项目 ID: ${route.query.projectId}`" 
                 readonly
                 placeholder="已选定项目"
               >
@@ -239,6 +239,9 @@ const projects = ref([])
 const previewDialogVisible = ref(false)
 const previewUrl = ref('')
 
+// 项目信息（用于显示项目名称）
+const projectInfo = ref(null)
+
 // 生成类型：template 或 project
 const generateType = computed(() => route.params.type || 'template')
 
@@ -301,6 +304,22 @@ const fetchProjects = async () => {
     projects.value = response.data.projects || []
   } catch (error) {
     console.error('获取项目列表失败:', error)
+  }
+}
+
+// 获取项目信息
+const fetchProjectInfo = async (projectId) => {
+  if (!projectId) return
+  
+  try {
+    const response = await projectAPI.getProject(projectId)
+    projectInfo.value = response.data.project
+    console.log('✅ 获取项目信息成功:', {
+      projectId,
+      projectName: projectInfo.value?.name
+    })
+  } catch (error) {
+    console.error('❌ 获取项目信息失败:', error)
   }
 }
 
@@ -507,14 +526,17 @@ const handleGoBack = () => {
 }
 
 // 页面加载时获取数据并初始化表单
-onMounted(() => {
-  fetchCategories()
-  fetchProjects()
+onMounted(async () => {
+  await fetchCategories()
+  await fetchProjects()
   
   // 检查路由查询参数，自动设置项目ID（如果从项目页面进入）
   if (generateType.value === 'project' && route.query.projectId) {
     form.projectId = route.query.projectId
     console.log('🎯 自动设置项目ID:', route.query.projectId, '项目名称:', route.query.projectName)
+    
+    // 获取项目详细信息
+    await fetchProjectInfo(route.query.projectId)
   }
 })
 </script>

@@ -155,6 +155,7 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
       createdItem = await prisma.cMSProjectData.create({
         data: {
           projectId,
+          categoryId: categoryId || null, // 添加分类ID
           data: {
             title: aiGeneratedData.title,
             description: aiGeneratedData.description,
@@ -177,6 +178,13 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
             select: {
               id: true,
               name: true
+            }
+          },
+          category: {
+            select: {
+              id: true,
+              name: true,
+              type: true
             }
           },
           creator: {

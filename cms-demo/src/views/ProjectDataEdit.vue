@@ -404,6 +404,9 @@ const categories = ref([])
 const previewDialogVisible = ref(false)
 const previewUrl = ref('')
 
+// 项目详细信息（用于获取项目名称）
+const projectInfo = ref(null)
+
 // 上传请求头
 const uploadHeaders = computed(() => ({
   'Authorization': `Bearer ${authStore.token}`
@@ -776,8 +779,14 @@ const fetchProjectData = async (id) => {
     }
     
     if (import.meta.env.DEV) {
-      console.log('加载的项目数据:', projectData.data)
-      console.log('填充后的表单数据:', form.data)
+      console.log('🔍 加载的项目数据详情:', {
+        id: projectData.id,
+        categoryId: projectData.categoryId,
+        category: projectData.category,
+        data: projectData.data
+      })
+      console.log('🔍 设置分类ID:', projectData.categoryId || '')
+      console.log('🔍 填充后的表单数据:', form.data)
     }
     
     // 清除表单验证，避免显示红字

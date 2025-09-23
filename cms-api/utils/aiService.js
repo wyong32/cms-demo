@@ -398,7 +398,7 @@ Return format:
 
     if (options.includes('autoStructure')) {
       prompt += `
-10. 生成URL友好的地址栏，必须包含目标关键词，确保SEO友好`;
+10. 生成URL友好的地址栏，直接基于标题生成，格式如"escape-road"，不要添加-game等后缀，不要以/开头`;
     }
 
     prompt += `
@@ -438,7 +438,7 @@ Return format:
 
     if (options.includes('autoStructure')) {
       prompt += `,
-  "addressBar": "url-friendly-english-address-with-keywords"`;
+  "addressBar": "基于标题'${title}'生成的简洁URL，如escape-road"`;
     }
 
     prompt += `

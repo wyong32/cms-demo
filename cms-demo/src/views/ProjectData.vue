@@ -4,7 +4,7 @@
     <div class="page-header">
       <div class="header-left">
         <el-button @click="handleGoBack" :icon="ArrowLeft">返回</el-button>
-        <h2>{{ projectName || '项目数据管理' }}</h2>
+        <h2>{{ projectInfo?.name || projectName || '项目数据管理' }}</h2>
       </div>
       <div class="header-right">
         <el-button 
@@ -244,11 +244,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Plus, Document, MagicStick, Picture } from '@element-plus/icons-vue'
-import { projectDataAPI, dataTemplateAPI, aiAPI, categoryAPI } from '../api'
+import { projectDataAPI, dataTemplateAPI, aiAPI, categoryAPI, projectAPI } from '../api'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -281,6 +281,9 @@ const navigatingToAdd = ref(false) // 跳转到添加数据loading
 const projectId = computed(() => route.params.projectId)
 const projectName = computed(() => route.query.projectName)
 
+// 项目详细信息（用于获取项目名称）
+const projectInfo = ref(null)
+
 // 搜索表单
 const searchForm = reactive({
   title: '',
@@ -304,10 +307,42 @@ const formatDate = (date) => {
   return dayjs(date).format('YYYY-MM-DD HH:mm:ss')
 }
 
+// 获取项目信息
+const fetchProjectInfo = async () => {
+  if (!projectId.value) {
+    console.error('❌ 项目ID不存在，无法获取项目信息')
+    return
+  }
+  
+  try {
+    const response = await projectAPI.getProject(projectId.value)
+    projectInfo.value = response.data.project
+    console.log('✅ 项目信息获取成功:', {
+      projectId: projectId.value,
+      projectName: projectInfo.value?.name,
+      routeProjectName: projectName.value
+    })
+  } catch (error) {
+    console.error('❌ 获取项目信息失败:', error)
+  }
+}
+
 // 获取项目数据列表
 const fetchProjectData = async () => {
+  // 检查项目ID是否存在
+  if (!projectId.value) {
+    console.error('❌ 项目ID不存在，无法获取项目数据')
+    ElMessage.error('项目ID缺失，请重新选择项目')
+    return
+  }
+  
   loading.value = true
   try {
+    // 如果项目信息不存在，先获取项目信息
+    if (!projectInfo.value) {
+      await fetchProjectInfo()
+    }
+    
     const params = {
       page: pagination.page,
       limit: pagination.limit,
@@ -322,11 +357,21 @@ const fetchProjectData = async () => {
       params.isCompleted = searchForm.isCompleted
     }
     
+    console.log('📊 获取项目数据，参数:', params)
+    
     const response = await projectDataAPI.getProjectData(params)
     tableData.value = response.data.projectData || []
     pagination.total = response.data.pagination?.total || 0
+    
+    console.log('✅ 项目数据获取成功:', {
+      count: tableData.value.length,
+      total: pagination.total,
+      projectId: projectId.value,
+      projectName: projectName.value,
+      projectInfoName: projectInfo.value?.name
+    })
   } catch (error) {
-    console.error('获取项目数据失败:', error)
+    console.error('❌ 获取项目数据失败:', error)
     ElMessage.error('获取项目数据失败')
   } finally {
     loading.value = false
@@ -709,9 +754,31 @@ const handleCreateFromTemplate = async () => {
 
 
 // 页面加载时获取数据
-onMounted(() => {
-  fetchProjectData()
+onMounted(async () => {
+  // 先获取项目信息，再获取项目数据
+  await fetchProjectInfo()
+  await fetchProjectData()
 })
+
+// 监听路由参数变化，重新获取数据
+watch(
+  () => [route.params.projectId, route.query.projectName],
+  ([newProjectId, newProjectName], [oldProjectId, oldProjectName]) => {
+    // 如果项目ID或项目名称发生变化，重新获取数据
+    if (newProjectId !== oldProjectId || newProjectName !== oldProjectName) {
+      console.log('🔄 路由参数变化，重新获取项目数据:', {
+        projectId: newProjectId,
+        projectName: newProjectName,
+        oldProjectId,
+        oldProjectName
+      })
+      // 重置项目信息，强制重新获取
+      projectInfo.value = null
+      fetchProjectData()
+    }
+  },
+  { immediate: false }
+)
 </script>
 
 <style scoped>
