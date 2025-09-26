@@ -161,6 +161,26 @@ const routes = [
           icon: 'Picture'
         }
       },
+      {
+        path: 'ai-usage',
+        name: 'AIUsage',
+        component: () => import('../views/AIUsage.vue'),
+        meta: {
+          title: 'AI使用情况',
+          icon: 'MagicStick',
+          requiresAdmin: true
+        }
+      },
+      {
+        path: 'ai-usage-test',
+        name: 'AIUsageTest',
+        component: () => import('../views/AIUsageTest.vue'),
+        meta: {
+          title: 'AI测试页面',
+          icon: 'MagicStick',
+          hideInMenu: true
+        }
+      },
       // 管理员功能
       {
         path: 'admin',

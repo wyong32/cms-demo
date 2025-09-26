@@ -114,6 +114,10 @@
                 <el-icon><Setting /></el-icon>
                 <span>管理员功能</span>
               </template>
+              <el-menu-item index="/ai-usage">
+                <el-icon><MagicStick /></el-icon>
+                <template #title>AI使用情况</template>
+              </el-menu-item>
               <el-menu-item index="/admin/projects">
                 <el-icon><Plus /></el-icon>
                 <template #title>添加项目</template>
@@ -175,7 +179,8 @@ import {
   Operation, 
   Setting, 
   UserFilled,
-  Picture
+  Picture,
+  MagicStick
 } from '@element-plus/icons-vue'
 
 const route = useRoute()

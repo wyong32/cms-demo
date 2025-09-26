@@ -159,7 +159,13 @@ export const statsAPI = {
   getOverview: () => api.get('/stats/overview'),
   
   // 获取详细统计信息
-  getDetailed: (params) => api.get('/stats/detailed', { params })
+  getDetailed: (params) => api.get('/stats/detailed', { params }),
+  
+  // 获取AI使用统计
+  getAIUsage: (timeRange = '30d') => api.get('/stats/ai-usage', { params: { timeRange } }),
+  
+  // 获取AI服务状态
+  getAIStatus: () => api.get('/stats/ai-status')
 }
 
 // 文件上传相关API

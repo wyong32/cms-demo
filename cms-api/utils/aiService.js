@@ -224,19 +224,19 @@ Return format:
   "tags": ["english-tag1", "english-tag2"],
   "imageAlt": "English image description",`;
 
-    if (options.includes('autoSEO')) {
+    if (options.autoSEO) {
       prompt += `
   "seoTitle": "SEO English title",
   "seoDescription": "SEO English description",
   "seoKeywords": "english keywords",`;
     }
 
-    if (options.includes('autoContent')) {
+    if (options.autoContent) {
       prompt += `
   "detailsHtml": "Detailed English HTML content",`;
     }
 
-    if (options.includes('autoStructure')) {
+    if (options.autoStructure) {
       prompt += `
   "addressBar": "url-friendly-english-address",`;
     }
@@ -357,12 +357,12 @@ Return format:
 6. 确保每次生成的内容都有不同的表达方式和结构布局
 7. 避免使用模板化的开头和结尾，要根据内容类型创造独特的体验`;
 
-    if (options.includes('autoSEO')) {
+    if (options.autoSEO) {
       prompt += `
 8. 生成SEO优化内容（标题、描述、关键词），确保目标关键词出现，避免使用重复的SEO模板`;
     }
 
-    if (options.includes('autoContent')) {
+    if (options.autoContent) {
       prompt += `
 9. 创建详细HTML内容，使用以下结构框架，AI填充具体内容：
    HTML结构：
@@ -396,7 +396,7 @@ Return format:
    - 每个部分都要有足够的内容深度和详细度`;
     }
 
-    if (options.includes('autoStructure')) {
+    if (options.autoStructure) {
       prompt += `
 10. 生成URL友好的地址栏，直接基于标题生成，格式如"escape-road"，不要添加-game等后缀，不要以/开头`;
     }
@@ -424,19 +424,19 @@ Return format:
   "tags": ["english-tag1", "english-tag2"],
   "imageAlt": "英文图片描述（包含目标关键词）"`;
 
-    if (options.includes('autoSEO')) {
+    if (options.autoSEO) {
       prompt += `,
   "seoTitle": "基于原标题'${title}'优化的SEO标题",
   "seoDescription": "SEO英文描述（包含目标关键词）",
   "seoKeywords": "英文关键词（包含目标关键词）"`;
     }
 
-    if (options.includes('autoContent')) {
+    if (options.autoContent) {
       prompt += `,
   "detailsHtml": "<div style=\\"font-family: Arial, sans-serif; line-height: 1.6; color: #333;\\"><h2>${title}</h2><p>详细的AI生成引言内容，至少100字符，要吸引人且有价值，包含关键词</p><h3>About</h3><p>深入详细的AI生成介绍，至少200字符，要专业且全面，详细阐述主题内容</p><h3>Features</h3><ul><li>详细的AI生成特点1，要具体描述功能和优势</li><li>详细的AI生成特点2，要具体描述功能和优势</li><li>详细的AI生成特点3，要具体描述功能和优势</li><li>更多详细的AI生成特点，至少5-8个</li></ul><h3>FAQ</h3><ul><li><div class=\\"faq-question\\">AI生成的问题1</div><div class=\\"faq-answer\\">AI生成的详细答案1</div></li><li><div class=\\"faq-question\\">AI生成的问题2</div><div class=\\"faq-answer\\">AI生成的详细答案2</div></li><li><div class=\\"faq-question\\">AI生成的问题3</div><div class=\\"faq-answer\\">AI生成的详细答案3</div></li><li>更多问答格式的FAQ，至少4-6个</li></ul><p>详细的AI生成总结内容，至少100字符，要有价值且完整，总结所有要点</p></div>（总字符数必须≥1000，标题必须使用'${title}'不变）"`;
     }
 
-    if (options.includes('autoStructure')) {
+    if (options.autoStructure) {
       prompt += `,
   "addressBar": "基于标题'${title}'生成的简洁URL，如escape-road"`;
     }
@@ -477,7 +477,7 @@ Return format:
     };
 
     // 确保SEO字段总是生成
-    if (options.includes('autoSEO')) {
+    if (options.autoSEO) {
       baseData.seoTitle = `${optimizedTitle} - Play Free Online | Gaming Experience`;
       baseData.seoDescription = shortDescription.length > 150 ? 
         shortDescription.substring(0, 147) + '...' : 
@@ -486,7 +486,7 @@ Return format:
     }
 
     // 确保HTML内容总是生成（详细内容，用于HTML内容区域）
-    if (options.includes('autoContent')) {
+    if (options.autoContent) {
       console.log('📄 开始生成HTML详细内容（备用模式）...');
       baseData.detailsHtml = this.generateDetailContent(optimizedTitle, description, shortDescription, null);
       console.log('✅ HTML内容生成成功，长度:', baseData.detailsHtml?.length || 0);
@@ -495,7 +495,7 @@ Return format:
     }
 
     // 确保地址栏总是生成
-    if (options.includes('autoStructure')) {
+    if (options.autoStructure) {
       baseData.addressBar = this.generateAddressBar(optimizedTitle);
     }
 
@@ -507,6 +507,16 @@ Return format:
   generateMockContent({ title, description, imageUrl, iframeUrl, options, categoryInfo }) {
     console.log('🎭 模拟模式: 正在生成AI模拟内容');
     console.log('📝 输入参数:', { title, description: description.substring(0, 50) + '...', options, categoryInfo });
+    
+    // 处理options格式：支持数组和对象两种格式
+    const optionsObj = {};
+    if (Array.isArray(options)) {
+      options.forEach(option => {
+        optionsObj[option] = true;
+      });
+    } else if (typeof options === 'object' && options !== null) {
+      Object.assign(optionsObj, options);
+    }
     
     // 优化标题，让AI自由发挥
     const optimizedTitle = this.optimizeTitle(title);
@@ -521,7 +531,7 @@ Return format:
     };
 
     // 确保SEO字段总是生成
-    if (options.includes('autoSEO')) {
+    if (optionsObj.autoSEO) {
       baseData.seoTitle = this.generateSeoTitle(optimizedTitle, categoryInfo);
       baseData.seoDescription = shortDescription.length > 150 ? 
         shortDescription.substring(0, 147) + '...' : 
@@ -530,7 +540,7 @@ Return format:
     }
 
     // 确保HTML内容总是生成（详细内容，用于HTML内容区域）
-    if (options.includes('autoContent')) {
+    if (optionsObj.autoContent) {
       console.log('📄 开始生成HTML详细内容...');
       baseData.detailsHtml = this.generateDetailContent(optimizedTitle, description, shortDescription, categoryInfo);
       console.log('✅ HTML内容生成成功，长度:', baseData.detailsHtml?.length || 0);
@@ -539,7 +549,7 @@ Return format:
     }
 
     // 确保地址栏总是生成
-    if (options.includes('autoStructure')) {
+    if (optionsObj.autoStructure) {
       baseData.addressBar = this.generateAddressBar(optimizedTitle);
     }
 
@@ -554,7 +564,7 @@ Return format:
     });
     
     // 最终验证：确保HTML内容存在
-    if (options.includes('autoContent') && !baseData.detailsHtml) {
+    if (optionsObj.autoContent && !baseData.detailsHtml) {
       console.error('❌ 严重错误: autoContent选项已选中但HTML内容为空！');
       // 强制生成基础HTML内容
       baseData.detailsHtml = `<div style="font-family: Arial, sans-serif; padding: 20px;"><h2>${baseData.title}</h2><p>${baseData.description}</p><p>基础内容已生成。</p></div>`;

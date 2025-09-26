@@ -234,8 +234,32 @@ Authorization: Bearer <token>
 - 用户名: admin
 - 密码: Admin123!
 
+## AI使用情况监控 (/api/stats)
+
+### 获取AI使用统计
+```
+GET /api/stats/ai-usage?timeRange=30d
+Authorization: Bearer <token>
+```
+
+参数：
+- `timeRange`: 时间范围，可选值：7d, 30d, 90d（默认30d）
+
+### 获取AI服务状态
+```
+GET /api/stats/ai-status
+Authorization: Bearer <token>
+```
+
+### 获取系统统计概览（包含AI统计）
+```
+GET /api/stats/overview
+Authorization: Bearer <token>
+```
+
 ## 注意事项
 1. 所有需要认证的接口都需要在Header中添加JWT token
 2. 管理员可以创建项目和用户，普通用户只能操作数据
 3. 删除操作会检查关联关系，有关联数据的资源无法删除
 4. 所有操作都会记录在操作日志中
+5. AI使用情况通过操作日志统计，包含AI生成的数据模板和项目数据

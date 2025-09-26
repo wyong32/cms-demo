@@ -76,6 +76,78 @@
       </el-col>
     </el-row>
     
+    <!-- AI使用情况统计 -->
+    <el-row :gutter="20" class="stats-row" v-if="aiStats && aiStats.summary">
+      <el-col :xs="24" :sm="8" :md="6">
+        <el-card class="stats-card ai-card">
+          <div class="stats-item">
+            <div class="stats-icon" style="background: #9c27b0;">
+              <el-icon size="24"><MagicStick /></el-icon>
+            </div>
+            <div class="stats-content">
+              <div class="stats-number">
+                <el-skeleton v-if="aiLoading" :rows="1" animated />
+                <span v-else>{{ aiStats.summary?.totalAiGenerated || 0 }}</span>
+              </div>
+              <div class="stats-label">AI生成总数</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      
+      <el-col :xs="24" :sm="8" :md="6">
+        <el-card class="stats-card ai-card">
+          <div class="stats-item">
+            <div class="stats-icon" style="background: #ff9800;">
+              <el-icon size="24"><Document /></el-icon>
+            </div>
+            <div class="stats-content">
+              <div class="stats-number">
+                <el-skeleton v-if="aiLoading" :rows="1" animated />
+                <span v-else>{{ aiStats.summary?.aiTemplates || 0 }}</span>
+              </div>
+              <div class="stats-label">AI模板</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      
+      <el-col :xs="24" :sm="8" :md="6">
+        <el-card class="stats-card ai-card">
+          <div class="stats-item">
+            <div class="stats-icon" style="background: #4caf50;">
+              <el-icon size="24"><DataLine /></el-icon>
+            </div>
+            <div class="stats-content">
+              <div class="stats-number">
+                <el-skeleton v-if="aiLoading" :rows="1" animated />
+                <span v-else>{{ aiStats.summary?.aiProjectData || 0 }}</span>
+              </div>
+              <div class="stats-label">AI项目数据</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      
+      <el-col :xs="24" :sm="8" :md="6">
+        <el-card class="stats-card ai-card">
+          <div class="stats-item">
+            <div class="stats-icon" style="background: #2196f3;">
+              <el-icon size="24"><Setting /></el-icon>
+            </div>
+            <div class="stats-content">
+              <div class="stats-number">
+                <el-skeleton v-if="aiLoading" :rows="1" animated />
+                <span v-else>{{ aiStatus?.provider || 'N/A' }}</span>
+              </div>
+              <div class="stats-label">AI服务商</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+    
+    
     <!-- 内容区域 -->
     <el-row :gutter="20" class="content-row">
       <!-- 最近活动 -->
@@ -185,7 +257,9 @@ import {
   Edit, 
   Delete, 
   Operation, 
-  UserFilled 
+  UserFilled,
+  MagicStick,
+  Setting,
 } from '@element-plus/icons-vue'
 
 // 配置dayjs
@@ -202,9 +276,22 @@ const stats = ref({
   totalProjectData: 0
 })
 
+// AI统计数据
+const aiStats = ref({
+  summary: {
+    totalAiGenerated: 0,
+    aiTemplates: 0,
+    aiProjectData: 0
+  }
+})
+const aiStatus = ref({
+  provider: 'unknown'
+})
+
 // 加载状态
 const loading = ref(true)
 const activitiesLoading = ref(false)
+const aiLoading = ref(false)
 
 // 最近活动
 const recentActivities = ref([])
@@ -212,6 +299,35 @@ const recentActivities = ref([])
 // 格式化时间
 const formatTime = (time) => {
   return dayjs(time).fromNow()
+}
+
+
+// 获取AI使用统计
+const fetchAIStats = async () => {
+  try {
+    aiLoading.value = true
+    console.log('🤖 正在获取AI使用统计...')
+    
+    const [aiUsageResponse, aiStatusResponse] = await Promise.all([
+      statsAPI.getAIUsage('30d'),
+      statsAPI.getAIStatus()
+    ])
+    
+    if (aiUsageResponse.data?.success) {
+      aiStats.value = aiUsageResponse.data.data
+      console.log('✅ AI使用统计获取成功:', aiStats.value.summary)
+    }
+    
+    if (aiStatusResponse.data?.success) {
+      aiStatus.value = aiStatusResponse.data.data
+      console.log('✅ AI服务状态获取成功:', aiStatus.value.provider)
+    }
+    
+  } catch (error) {
+    console.error('❌ 获取AI统计失败:', error)
+  } finally {
+    aiLoading.value = false
+  }
 }
 
 // 获取统计数据
@@ -289,6 +405,7 @@ onMounted(async () => {
   try {
     await Promise.all([
       fetchStats(),
+      fetchAIStats(),
       refreshActivities()
     ])
   } catch (error) {
@@ -326,6 +443,16 @@ onMounted(async () => {
 .stats-card {
   height: 120px;
 }
+
+.ai-card {
+  border-left: 4px solid #9c27b0;
+  background: linear-gradient(135deg, #f8f9ff 0%, #f0f2ff 100%);
+}
+
+.ai-card .stats-icon {
+  box-shadow: 0 4px 12px rgba(156, 39, 176, 0.3);
+}
+
 
 .stats-item {
   display: flex;
