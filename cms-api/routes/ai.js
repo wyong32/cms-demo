@@ -17,7 +17,8 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
       iframeUrl,
       options = [],
       categoryId,
-      projectId
+      projectId,
+      saveAsTemplate // 是否保存为模板（仅项目数据有效）
     } = req.body;
 
     // 验证必需参数
@@ -207,10 +208,10 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
         }
       });
 
-      // 如果有分类信息，自动创建数据模板
-      if (categoryId) {
+      // 如果有分类信息且用户勾选了"保存为模板"，则创建数据模板
+      if (saveAsTemplate && categoryId) {
         try {
-          console.log('🔄 自动创建数据模板...');
+          console.log('🔄 用户选择保存为模板，开始创建数据模板...');
           
           // 检查模板标题是否重复
           const existingTemplate = await prisma.cMSDataTemplate.findFirst({

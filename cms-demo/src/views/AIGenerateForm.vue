@@ -66,7 +66,19 @@
             />
             <div class="category-tip">
               <el-text type="info" size="small">
-                {{ generateType === 'template' ? '选择分类有助于AI生成更符合分类特征的内容' : '选择分类后，该数据会自动添加到对应分类的数据模板中' }}
+                选择分类有助于AI生成更符合分类特征的内容
+              </el-text>
+            </div>
+          </el-form-item>
+          
+          <!-- 是否保存为模板（仅项目数据类型显示） -->
+          <el-form-item v-if="generateType === 'project'" label="保存为模板">
+            <el-checkbox v-model="form.saveAsTemplate">
+              是否保存为模板数据
+            </el-checkbox>
+            <div class="template-tip">
+              <el-text type="info" size="small">
+                勾选后，该数据将同时保存到数据模板库中，供其他项目复用
               </el-text>
             </div>
           </el-form-item>
@@ -260,6 +272,7 @@ const form = reactive({
   title: '',
   categoryId: '', // 仅模板需要
   projectId: '', // 仅项目数据需要
+  saveAsTemplate: false, // 是否保存为模板（默认不勾选，仅项目数据有效）
   imageUrl: '',
   iframeUrl: '',
   description: '',
@@ -451,7 +464,10 @@ const handleGenerate = async () => {
       iframeUrl: form.iframeUrl,
       options: form.generateOptions,
       categoryId: form.categoryId, // 现在所有类型都需要分类
-      ...(generateType.value === 'project' && { projectId: form.projectId })
+      ...(generateType.value === 'project' && { 
+        projectId: form.projectId,
+        saveAsTemplate: form.saveAsTemplate // 项目数据类型传递保存为模板参数
+      })
     }
     
     console.log('🚀 开始AI生成，数据:', generateData)
@@ -460,7 +476,17 @@ const handleGenerate = async () => {
     const response = await aiAPI.generate(generateData)
     
     if (response.data.success) {
-      ElMessage.success('AI生成成功！正在跳转...')
+      // 根据类型和是否保存为模板显示不同提示
+      if (generateType.value === 'template') {
+        ElMessage.success('AI生成成功！正在跳转...')
+      } else {
+        if (form.saveAsTemplate) {
+          ElMessage.success('AI生成成功，已保存为数据模板！正在跳转...')
+        } else {
+          ElMessage.success('AI生成成功！正在跳转...')
+        }
+      }
+      
       // 跳转到对应的列表页面
       if (generateType.value === 'template') {
         router.push({ name: 'DataTemplates' })
@@ -495,6 +521,7 @@ const handleReset = () => {
   form.title = ''
   form.categoryId = ''
   form.projectId = ''
+  form.saveAsTemplate = false
   form.imageUrl = ''
   form.iframeUrl = ''
   form.description = ''
@@ -726,6 +753,10 @@ onMounted(async () => {
 }
 
 .category-tip {
+  margin-top: 8px;
+}
+
+.template-tip {
   margin-top: 8px;
 }
 

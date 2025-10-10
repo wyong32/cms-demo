@@ -136,7 +136,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // 创建项目数据
 router.post('/', authenticateToken, requireUser, validateRequired(['projectId', 'data']), async (req, res) => {
   try {
-    const { projectId, categoryId, data } = req.body;
+    const { projectId, categoryId, saveAsTemplate, data } = req.body;
 
     // 验证项目是否存在
     const project = await prisma.cMSProject.findUnique({
@@ -243,10 +243,10 @@ router.post('/', authenticateToken, requireUser, validateRequired(['projectId', 
       }
     });
 
-    // 如果有分类信息，自动创建数据模板
-    if (categoryId && cleanedData.title) {
+    // 如果有分类信息且用户勾选了"保存为模板"，则创建数据模板
+    if (saveAsTemplate && categoryId && cleanedData.title) {
       try {
-        console.log('🔄 自动创建数据模板...');
+        console.log('🔄 用户选择保存为模板，开始创建数据模板...');
         
         // 检查模板标题是否重复
         const existingTemplate = await prisma.cMSDataTemplate.findFirst({

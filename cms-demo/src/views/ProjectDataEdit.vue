@@ -52,9 +52,20 @@
                   top-placeholder="请选择一级分类"
                   :show-count="true"
                 />
-                <div class="category-tip">
+              </el-form-item>
+            </el-col>
+          </el-row>
+          
+          <!-- 是否保存为模板（仅在新建模式显示） -->
+          <el-row :gutter="20" v-if="!isEdit">
+            <el-col :span="24">
+              <el-form-item label="保存为模板">
+                <el-checkbox v-model="form.saveAsTemplate">
+                  是否保存为模板数据
+                </el-checkbox>
+                <div class="template-tip">
                   <el-text type="info" size="small">
-                    选择分类后，该数据会自动添加到对应分类的数据模板中
+                    勾选后，该数据将同时保存到数据模板库中，供其他项目复用
                   </el-text>
                 </div>
               </el-form-item>
@@ -428,6 +439,7 @@ const templateCategoryId = computed(() => route.query.categoryId)
 // 表单数据
 const form = reactive({
   categoryId: '', // 分类ID
+  saveAsTemplate: false, // 是否保存为模板（默认不勾选）
   data: {}
 })
 
@@ -873,16 +885,22 @@ const handleSave = async () => {
     const submitData = {
       projectId: projectId.value,
       categoryId: categoryId || null, // 添加分类ID
+      saveAsTemplate: form.saveAsTemplate, // 是否保存为模板
       data: form.data
     }
     
     
     if (isEdit.value) {
       await projectDataAPI.updateProjectData(route.params.id, submitData)
-      ElMessage.success('更新成功，状态已重置为未完成')
+      ElMessage.success('更新成功')
     } else {
       await projectDataAPI.createProjectData(submitData)
-      ElMessage.success('创建成功，已自动添加到数据模板')
+      // 根据是否勾选模板显示不同提示
+      if (form.saveAsTemplate) {
+        ElMessage.success('创建成功，已保存为数据模板')
+      } else {
+        ElMessage.success('创建成功')
+      }
     }
     
     router.push({ 
@@ -1219,6 +1237,10 @@ onMounted(async () => {
 }
 
 .category-tip {
+  margin-top: 8px;
+}
+
+.template-tip {
   margin-top: 8px;
 }
 
