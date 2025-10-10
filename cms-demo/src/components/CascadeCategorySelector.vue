@@ -18,7 +18,7 @@
       />
     </el-select>
 
-    <!-- 二级分类选择 -->
+    <!-- 二级分类选择（可选） -->
     <el-select 
       v-model="selectedValue"
       :placeholder="placeholder"
@@ -64,7 +64,7 @@ const props = defineProps({
   },
   placeholder: {
     type: String,
-    default: '请选择二级分类'
+    default: '请选择二级分类（可选）'
   },
   topPlaceholder: {
     type: String,
@@ -107,7 +107,7 @@ watch(() => props.modelValue, (newValue) => {
     const category = allCategories.value.find(c => c.id === newValue)
     if (category && category.parentId) {
       topCategoryId.value = category.parentId
-      // 只筛选二级分类，不清空selectedValue
+      // 筛选二级分类
       filteredCategories.value = allCategories.value.filter(c => c.parentId === category.parentId)
     }
   }
@@ -128,8 +128,13 @@ const handleTopCategoryChange = (topId) => {
     filteredCategories.value = allCategories.value.filter(c => c.parentId === topId)
     console.log('🔍 一级分类ID:', topId)
     console.log('📋 筛选出的二级分类:', filteredCategories.value.map(c => c.name))
+    
+    // 选择一级分类时，将一级分类ID作为值（允许只选一级分类）
+    emit('update:modelValue', topId)
+    console.log('✅ 选择了一级分类，ID:', topId)
   } else {
     filteredCategories.value = []
+    emit('update:modelValue', '')
   }
   
   emit('top-category-change', topId)

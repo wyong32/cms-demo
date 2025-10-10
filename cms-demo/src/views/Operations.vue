@@ -149,9 +149,19 @@
             {{ row.project?.name || '无项目' }}
           </template>
         </el-table-column>
-        <el-table-column label="分类" width="120">
+        <el-table-column label="分类" width="180">
           <template #default="{ row }">
-            {{ row.category?.parent?.name || row.category?.name || '无分类' }}
+            <template v-if="row.category">
+              <template v-if="row.category.parent">
+                {{ row.category.parent.name }} / {{ row.category.name }}
+              </template>
+              <template v-else>
+                {{ row.category.name }}
+              </template>
+            </template>
+            <template v-else>
+              无分类
+            </template>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="100" align="center">
