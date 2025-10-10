@@ -39,11 +39,11 @@ router.post('/image', authenticateToken, upload.single('image'), async (req, res
       });
     }
 
-    // 使用图片处理器上传
+    // 使用图片处理器上传（保留原始格式）
     const uploadResult = await uploadImage(req.file.buffer, req.file.originalname, {
       folder: 'cms-uploads',
-      quality: 'auto',
-      format: 'auto'
+      quality: 'auto'
+      // 不设置format参数，保留原始格式
     });
 
     if (!uploadResult.success) {

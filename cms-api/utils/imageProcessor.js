@@ -19,7 +19,7 @@ export const uploadImage = async (imageBuffer, originalName, options = {}) => {
     const {
       folder = 'cms-uploads',
       quality = 'auto',
-      format = 'auto',
+      format = null, // 默认不转换格式，保留原始格式
       width,
       height,
       crop = 'fill'
@@ -37,7 +37,7 @@ export const uploadImage = async (imageBuffer, originalName, options = {}) => {
       public_id: publicId,
       resource_type: 'auto',
       quality,
-      fetch_format: format,
+      ...(format && { fetch_format: format }), // 只有指定format时才添加
       ...(width && height && { width, height, crop })
     };
 

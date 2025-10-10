@@ -2,7 +2,9 @@
   <div class="categories-page">
     <!-- 页面头部 -->
     <div class="page-header">
-      <h2>分类管理</h2>
+      <div class="header-left">
+        <h2>{{ currentParentCategory ? `${currentParentCategory.name} - 分类列表` : '数据分类列表' }}</h2>
+      </div>
       <el-button type="primary" @click="handleAdd">
         <el-icon><Plus /></el-icon>
         添加分类
@@ -35,11 +37,10 @@
         :data="tableData" 
         border
         stripe
-        @selection-change="handleSelectionChange"
       >
-        <el-table-column type="selection" width="55" />
         <el-table-column prop="name" label="分类名称" min-width="150" />
-        <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="type" label="类型" width="120" />
+        <el-table-column prop="description" label="描述" min-width="250" show-overflow-tooltip />
         <el-table-column label="模板数量" width="100" align="center">
           <template #default="{ row }">
             {{ row._count?.dataTemplates || 0 }}
@@ -80,27 +81,25 @@
         />
       </div>
     </el-card>
-
-    <!-- 批量操作 -->
-    <div v-if="selectedRows.length > 0" class="batch-actions">
-      <el-button type="danger" @click="handleBatchDelete">
-        批量删除 ({{ selectedRows.length }})
-      </el-button>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { categoryAPI } from '../api'
+import { Plus } from '@element-plus/icons-vue'
+import { categoriesAPI } from '../api'
 import dayjs from 'dayjs'
 
 const router = useRouter()
-const loading = ref(false)
+const route = useRoute()
+const loading = ref(true) // 初始状态为true，避免闪烁
 const tableData = ref([])
-const selectedRows = ref([])
+const currentParentCategory = ref(null)
+
+// 当前父分类ID（从URL获取）
+const currentParentId = computed(() => route.query.parentId || '')
 
 // 搜索表单
 const searchForm = reactive({
@@ -119,20 +118,40 @@ const formatDate = (date) => {
   return dayjs(date).format('YYYY-MM-DD HH:mm:ss')
 }
 
-// 获取分类列表
+// 获取当前父分类信息
+const fetchParentCategory = async (parentId) => {
+  if (!parentId) {
+    currentParentCategory.value = null
+    return
+  }
+  
+  try {
+    const response = await categoriesAPI.getCategory(parentId)
+    currentParentCategory.value = response?.category
+  } catch (error) {
+    console.error('获取父分类信息失败:', error)
+  }
+}
+
+// 获取分类列表（只显示二级分类）
 const fetchCategories = async () => {
   loading.value = true
   try {
     const params = {
       page: pagination.page,
       limit: pagination.limit,
+      level: 2, // 只查询二级分类
       search: searchForm.name
     }
     
-    const response = await categoryAPI.getCategories(params)
-    console.log('Categories API响应:', response?.data) // 调试日志
-    tableData.value = response?.data?.categories || []
-    pagination.total = response?.data?.pagination?.total || 0
+    // 如果有父分类ID，则筛选该父分类下的分类
+    if (currentParentId.value) {
+      params.parentId = currentParentId.value
+    }
+    
+    const response = await categoriesAPI.getCategories(params)
+    tableData.value = response?.data?.categories || response?.categories || []
+    pagination.total = response?.data?.pagination?.total || response?.pagination?.total || 0
   } catch (error) {
     console.error('获取分类失败:', error)
     ElMessage.error('获取分类失败')
@@ -143,7 +162,12 @@ const fetchCategories = async () => {
 
 // 处理添加
 const handleAdd = () => {
-  router.push({ name: 'CategoryAdd' })
+  // 如果有父分类，则传递父分类ID
+  const query = currentParentId.value ? { parentId: currentParentId.value } : {}
+  router.push({ 
+    name: 'CategoryAdd',
+    query
+  })
 }
 
 // 处理编辑
@@ -164,47 +188,15 @@ const handleDelete = async (row) => {
       }
     )
     
-    await categoryAPI.deleteCategory(row.id)
+    await categoriesAPI.deleteCategory(row.id)
     ElMessage.success('删除成功')
     fetchCategories()
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
-      ElMessage.error('删除失败')
+      ElMessage.error(error.response?.data?.error || '删除失败')
     }
   }
-}
-
-// 处理批量删除
-const handleBatchDelete = async () => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除选中的 ${selectedRows.value.length} 个分类吗？`,
-      '提示',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-    
-    const promises = selectedRows.value.map(row => categoryAPI.deleteCategory(row.id))
-    await Promise.all(promises)
-    
-    ElMessage.success('批量删除成功')
-    selectedRows.value = []
-    fetchCategories()
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('批量删除失败:', error)
-      ElMessage.error('批量删除失败')
-    }
-  }
-}
-
-// 处理选择变化
-const handleSelectionChange = (selection) => {
-  selectedRows.value = selection
 }
 
 // 处理搜索
@@ -233,8 +225,21 @@ const handleSizeChange = (size) => {
   fetchCategories()
 }
 
+// 监听路由变化
+watch(() => route.query.parentId, async (newParentId) => {
+  if (newParentId) {
+    await fetchParentCategory(newParentId)
+  } else {
+    currentParentCategory.value = null
+  }
+  fetchCategories()
+})
+
 // 页面加载时获取数据
-onMounted(() => {
+onMounted(async () => {
+  if (currentParentId.value) {
+    await fetchParentCategory(currentParentId.value)
+  }
   fetchCategories()
 })
 </script>
@@ -251,7 +256,7 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
-.page-header h2 {
+.header-left h2 {
   margin: 0;
   font-size: 24px;
   color: #303133;
@@ -269,18 +274,6 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 20px;
-}
-
-.batch-actions {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-  padding: 12px 20px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* 响应式样式 */

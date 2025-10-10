@@ -46,14 +46,12 @@
             </el-col>
             <el-col :span="12">
               <el-form-item label="分类" prop="categoryId" required>
-                <el-select v-model="form.categoryId" placeholder="请选择分类" style="width: 100%">
-                  <el-option
-                    v-for="category in categories"
-                    :key="category.id"
-                    :label="category.name"
-                    :value="category.id"
-                  />
-                </el-select>
+                <CascadeCategorySelector 
+                  v-model="form.categoryId"
+                  placeholder="请选择二级分类"
+                  top-placeholder="请选择一级分类"
+                  :show-count="true"
+                />
                 <div class="category-tip">
                   <el-text type="info" size="small">
                     选择分类后，该数据会自动添加到对应分类的数据模板中
@@ -388,6 +386,7 @@ import { ArrowLeft, Plus } from '@element-plus/icons-vue'
 import { projectDataAPI, projectAPI, templateAPI, categoryAPI, dataTemplateAPI } from '../api'
 import { useAuthStore } from '../stores/counter'
 import RichTextEditor from '../components/RichTextEditor.vue'
+import CascadeCategorySelector from '../components/CascadeCategorySelector.vue'
 
 const router = useRouter()
 const route = useRoute()

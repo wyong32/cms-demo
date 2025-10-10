@@ -25,9 +25,12 @@ export const authAPI = {
 }
 
 // 分类相关API
-export const categoryAPI = {
-  // 获取分类列表
+export const categoriesAPI = {
+  // 获取分类列表（支持层级查询）
   getCategories: (params) => api.get('/categories', { params }),
+  
+  // 获取分类树结构
+  getCategoryTree: (params) => api.get('/categories/tree', { params }),
   
   // 获取单个分类
   getCategory: (id) => api.get(`/categories/${id}`),
@@ -41,9 +44,15 @@ export const categoryAPI = {
   // 删除分类
   deleteCategory: (id) => api.delete(`/categories/${id}`),
   
+  // 批量删除分类
+  batchDeleteCategories: (ids) => api.delete('/categories/batch', { data: { ids } }),
+  
   // 获取分类统计
   getCategoryStats: () => api.get('/categories/stats/overview')
 }
+
+// 保持向后兼容
+export const categoryAPI = categoriesAPI
 
 // 数据模板相关API
 export const templateAPI = {

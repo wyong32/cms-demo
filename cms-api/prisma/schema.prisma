@@ -37,22 +37,30 @@ enum Role {
   USER
 }
 
-// 分类表
+// 分类表（支持二层分类）
 model CMSCategory {
   id          String   @id @default(cuid())
   name        String   @unique
   type        String   // 分类类型，如"游戏", "应用"等
   description String?
+  level       Int      @default(2) // 分类层级：1=一级分类，2=二级分类
+  parentId    String?  // 父分类ID，一级分类为null
+  order       Int?     // 排序字段（可选）
+  isActive    Boolean? // 是否启用（可选）
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   createdBy   String
 
   // 关联关系
   creator       CMSUser           @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  parent        CMSCategory?      @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children      CMSCategory[]     @relation("CategoryHierarchy")
   dataTemplates CMSDataTemplate[]
   projectData   CMSProjectData[]
 
   @@map("cms_categories")
+  @@index([parentId])
+  @@index([level])
 }
 
 // 数据模板表（4-1中用户创建的模板）

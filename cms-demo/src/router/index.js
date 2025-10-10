@@ -171,16 +171,6 @@ const routes = [
           requiresAdmin: true
         }
       },
-      {
-        path: 'ai-usage-test',
-        name: 'AIUsageTest',
-        component: () => import('../views/AIUsageTest.vue'),
-        meta: {
-          title: 'AI测试页面',
-          icon: 'MagicStick',
-          hideInMenu: true
-        }
-      },
       // 管理员功能
       {
         path: 'admin',
@@ -191,6 +181,15 @@ const routes = [
           requiresAdmin: true
         },
         children: [
+          {
+            path: 'top-categories',
+            name: 'TopLevelCategories',
+            component: () => import('../views/TopLevelCategories.vue'),
+            meta: {
+              title: '一级分类管理',
+              requiresAdmin: true
+            }
+          },
           {
             path: 'projects',
             name: 'AdminProjects',

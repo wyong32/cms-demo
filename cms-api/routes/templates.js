@@ -8,7 +8,7 @@ const router = express.Router();
 // 获取所有数据模板
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const { page = 1, limit = 20, search, categoryId } = req.query;
+    const { page = 1, limit = 20, search, categoryId, categoryIds } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     let where = {};
@@ -21,8 +21,16 @@ router.get('/', authenticateToken, async (req, res) => {
       ];
     }
     
+    // 支持单个分类ID
     if (categoryId) {
       where.categoryId = categoryId;
+    }
+    // 支持多个分类ID（用于一级分类筛选）
+    else if (categoryIds) {
+      const ids = categoryIds.split(',').filter(id => id.trim());
+      if (ids.length > 0) {
+        where.categoryId = { in: ids };
+      }
     }
 
     const [templates, total] = await Promise.all([
@@ -33,7 +41,13 @@ router.get('/', authenticateToken, async (req, res) => {
             select: {
               id: true,
               name: true,
-              type: true
+              type: true,
+              parent: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              }
             }
           },
           creator: {

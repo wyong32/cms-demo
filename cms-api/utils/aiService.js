@@ -134,8 +134,8 @@ class AIService {
         return this.generateMockContent({ title, description, imageUrl, iframeUrl, options, categoryInfo });
       }
 
-      // 使用稳定的模型
-      const model = this.client.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      // 使用最新的模型
+      const model = this.client.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
       const prompt = this.buildGeminiPrompt({ title, description, imageUrl, iframeUrl, options, categoryInfo });
 
       console.log('🤖 真实AI: 正在调用Gemini API...');
@@ -412,6 +412,21 @@ Return format:
 - 优先使用语义化HTML标签和简单的文本样式
 - 避免使用gradient、复杂背景色等样式
 - 关键词密度计算：目标关键词出现次数 ÷ 总词数 × 100% ≈ 5%
+
+**必须返回的JSON字段（所有字段都必须包含）：**
+{
+  "title": "标题（保持用户提供的标题不变）",
+  "description": "简要描述（最多300字符）",
+  "tags": ["标签1", "标签2", "标签3"],
+  "imageAlt": "图片alt文本",
+  "seoTitle": "SEO优化标题",
+  "seoDescription": "SEO描述（150-160字符）",
+  "seoKeywords": "SEO关键词（逗号分隔）",
+  "addressBar": "URL友好的地址栏",
+  "detailsHtml": "详细的HTML内容（不少于1000字符）"
+}
+
+**重要：必须返回完整的JSON对象，包含所有上述字段！**
 - 每次生成都要创造独特的内容体验，避免重复使用相同的表达方式
 - 标题要根据内容类型选择合适的词汇，避免千篇一律
 - 内容要包含具体的数据、案例、引用或特色功能，增加可信度和独特性
@@ -449,16 +464,20 @@ Return format:
 
   // 格式化AI响应
   formatAIResponse(response) {
+    // 为必填字段提供默认值，避免验证失败
+    const title = response.title || '';
+    const description = response.description || '';
+    
     return {
-      title: response.title || '',
-      description: response.description || '',
+      title: title,
+      description: description,
       tags: response.tags || [],
       imageAlt: response.imageAlt || null,
-      seoTitle: response.seoTitle || null,
-      seoDescription: response.seoDescription || null,
-      seoKeywords: response.seoKeywords || null,
-      addressBar: response.addressBar || null,
-      detailsHtml: response.detailsHtml || null
+      seoTitle: response.seoTitle || this.generateSeoTitle(title),
+      seoDescription: response.seoDescription || this.generateSeoDescription(description),
+      seoKeywords: response.seoKeywords || this.generateSeoKeywords(title, response.tags),
+      addressBar: response.addressBar || this.generateAddressBar(title) || 'default-address',
+      detailsHtml: response.detailsHtml || this.generateDetailContent(title, description, description)
     };
   }
 
@@ -650,13 +669,43 @@ Return format:
 
   // 生成地址栏内容
   generateAddressBar(title) {
-    return title.toLowerCase()
+    if (!title) return 'default-address';
+    
+    // 将中文转换为拼音或使用英文替代
+    let processedTitle = title;
+    
+    // 简单的中文标题处理：使用拼音或英文替代
+    const chineseToEnglish = {
+      '超级马里奥兄弟': 'super-mario-bros',
+      '马里奥': 'mario',
+      '游戏': 'game',
+      '超级': 'super',
+      '兄弟': 'bros',
+      '冒险': 'adventure',
+      '动作': 'action',
+      '角色扮演': 'rpg',
+      '策略': 'strategy',
+      '射击': 'shooter',
+      '体育': 'sports',
+      '竞速': 'racing',
+      '模拟': 'simulation',
+      '益智': 'puzzle',
+      '音乐': 'music',
+      '舞蹈': 'dance'
+    };
+    
+    // 替换常见中文词汇
+    Object.keys(chineseToEnglish).forEach(chinese => {
+      processedTitle = processedTitle.replace(new RegExp(chinese, 'g'), chineseToEnglish[chinese]);
+    });
+    
+    return processedTitle.toLowerCase()
       .replace(/[^\w\s-]/g, '') // 移除特殊字符
       .replace(/\s+/g, '-') // 空格替换为连字符
       .replace(/[^\x00-\x7F]/g, '') // 移除非ASCII字符
       .replace(/-+/g, '-') // 多个连字符合并为一个
       .replace(/^-|-$/g, '') // 移除开头和结尾的连字符
-      .substring(0, 50); // 限制长度
+      .substring(0, 50) || 'default-address'; // 限制长度，如果为空则返回默认值
   }
 
 
@@ -686,6 +735,35 @@ Return format:
     }
     
     return `${title} ${suffix}`;
+  }
+
+  // 生成SEO描述
+  generateSeoDescription(description) {
+    // 基于原始描述生成SEO友好的描述
+    const baseDesc = description || 'Discover amazing content and resources';
+    
+    // 确保描述长度在150-160字符之间，适合SEO
+    if (baseDesc.length <= 160) {
+      return baseDesc;
+    }
+    
+    // 截断并添加省略号
+    return baseDesc.substring(0, 157) + '...';
+  }
+
+  // 生成SEO关键词
+  generateSeoKeywords(title, tags = []) {
+    // 从标题中提取关键词
+    const titleKeywords = this.extractTitleKeywords(title);
+    
+    // 合并标题关键词和标签
+    const allKeywords = [...titleKeywords, ...tags];
+    
+    // 去重并限制数量
+    const uniqueKeywords = [...new Set(allKeywords.map(k => k.toLowerCase()))];
+    
+    // 返回前5个关键词，用逗号分隔
+    return uniqueKeywords.slice(0, 5).join(', ');
   }
 
   // 生成基础HTML结构框架，Mock模式简单填充

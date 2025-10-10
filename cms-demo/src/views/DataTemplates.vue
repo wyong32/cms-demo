@@ -28,24 +28,39 @@
             @keyup.enter="handleSearch"
           />
         </el-form-item>
-        <el-form-item label="分类">
+        <el-form-item label="一级分类">
+          <el-select 
+            v-model="searchForm.topCategoryId" 
+            placeholder="请选择一级分类" 
+            clearable 
+            @change="handleTopCategoryChange"
+            style="width: 150px"
+          >
+            <el-option
+              v-for="topCategory in topCategories"
+              :key="topCategory.id"
+              :label="topCategory.name"
+              :value="topCategory.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="二级分类">
           <el-select 
             v-model="searchForm.categoryId" 
-            placeholder="请选择分类" 
+            placeholder="请选择二级分类" 
             clearable 
             @change="handleCategoryChange" 
             @clear="handleCategoryChange"
             style="width: 200px"
             filterable
+            :disabled="!searchForm.topCategoryId"
           >
             <el-option
-              v-for="category in categories"
+              v-for="category in filteredCategories"
               :key="category.id"
               :label="category.name"
               :value="category.id"
-            >
-              {{ category.name }}
-            </el-option>
+            />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -93,7 +108,7 @@
               <h4 class="template-title">{{ template.title }}</h4>
               <p class="template-description">{{ template.description || '暂无描述' }}</p>
               <div class="template-meta">
-                <el-tag size="small" type="primary">{{ template.category?.name || '未分类' }}</el-tag>
+                <el-tag size="small" type="primary">{{ template.category?.parent?.name || '未分类' }}</el-tag>
                 <span class="template-creator">{{ template.creator?.username || '未知' }}</span>
               </div>
               <div class="template-date">{{ formatDate(template.createdAt) }}</div>
@@ -165,7 +180,9 @@ import dayjs from 'dayjs'
 const router = useRouter()
 const loading = ref(false)
 const tableData = ref([])
-const categories = ref([])
+const topCategories = ref([]) // 一级分类列表
+const categories = ref([]) // 所有二级分类列表
+const filteredCategories = ref([]) // 根据一级分类筛选的二级分类
 const selectedRows = ref([])
 
 // 各种操作的loading状态
@@ -177,7 +194,8 @@ const navigatingToAdd = ref(false) // 跳转到添加页面loading
 // 搜索表单
 const searchForm = reactive({
   title: '',
-  categoryId: ''
+  topCategoryId: '', // 一级分类ID
+  categoryId: '' // 二级分类ID
 })
 
 // 分页信息
@@ -192,26 +210,49 @@ const formatDate = (date) => {
   return dayjs(date).format('YYYY-MM-DD HH:mm:ss')
 }
 
-// 获取分类列表
+// 获取一级分类列表
+const fetchTopCategories = async () => {
+  try {
+    const response = await categoryAPI.getCategories({ level: 1 })
+    topCategories.value = response?.data?.categories || response?.categories || []
+  } catch (error) {
+    console.error('获取一级分类失败:', error)
+  }
+}
+
+// 获取所有二级分类列表
 const fetchCategories = async () => {
   try {
-    console.log('开始获取分类列表...')
-    const response = await categoryAPI.getCategories()
-    console.log('分类API完整响应:', response)
-    console.log('分类API响应数据:', response?.data)
-    categories.value = response?.data?.categories || []
+    const response = await categoryAPI.getCategories({ level: 2 })
+    categories.value = response?.data?.categories || response?.categories || []
+    filteredCategories.value = categories.value
   } catch (error) {
     console.error('获取分类失败:', error)
-    console.error('错误详情:', error.response || error.message)
-    ElMessage.error('获取分类失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error('获取分类失败')
   }
+}
+
+// 处理一级分类变化
+const handleTopCategoryChange = (topCategoryId) => {
+  // 清空二级分类选择
+  searchForm.categoryId = ''
+  
+  if (topCategoryId) {
+    // 筛选该一级分类下的二级分类
+    filteredCategories.value = categories.value.filter(cat => cat.parentId === topCategoryId)
+  } else {
+    // 显示所有二级分类
+    filteredCategories.value = categories.value
+  }
+  
+  // 触发搜索
+  handleSearch()
 }
 
 // 获取数据模板列表
 const fetchDataTemplates = async () => {
   loading.value = true
   try {
-    console.log('开始获取数据模板列表...')
     const params = {
       page: pagination.page,
       limit: pagination.limit
@@ -222,22 +263,29 @@ const fetchDataTemplates = async () => {
       params.search = searchForm.title.trim()
     }
     
-    // 只有当分类ID不为空时才添加参数
+    // 如果选择了二级分类，直接按二级分类筛选
     if (searchForm.categoryId) {
       params.categoryId = searchForm.categoryId
+    } 
+    // 如果只选择了一级分类，需要获取该一级分类下所有二级分类的ID
+    else if (searchForm.topCategoryId) {
+      const childCategories = categories.value.filter(cat => cat.parentId === searchForm.topCategoryId)
+      
+      if (childCategories.length > 0) {
+        // 后端支持多个categoryId，用逗号分隔
+        params.categoryIds = childCategories.map(cat => cat.id).join(',')
+      } else {
+        // 如果没有子分类，设置一个不存在的ID，确保返回空结果
+        params.categoryId = 'no-category-found'
+      }
     }
     
-    console.log('请求参数:', params)
-    
     const response = await dataTemplateAPI.getTemplates(params)
-    console.log('模板API完整响应:', response)
-    console.log('模板API响应数据:', response?.data)
     tableData.value = response?.data?.templates || []
     pagination.total = response?.data?.pagination?.total || 0
   } catch (error) {
     console.error('获取数据模板失败:', error)
-    console.error('错误详情:', error.response || error.message)
-    ElMessage.error('获取数据模板失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error('获取数据模板失败')
   } finally {
     loading.value = false
   }
@@ -396,7 +444,9 @@ const handleSearch = () => {
 // 处理重置
 const handleReset = () => {
   searchForm.title = ''
+  searchForm.topCategoryId = ''
   searchForm.categoryId = ''
+  filteredCategories.value = categories.value
   pagination.page = 1
   fetchDataTemplates()
 }
@@ -416,6 +466,7 @@ const handleSizeChange = (size) => {
 
 // 页面加载时获取数据
 onMounted(() => {
+  fetchTopCategories()
   fetchCategories()
   fetchDataTemplates()
 })

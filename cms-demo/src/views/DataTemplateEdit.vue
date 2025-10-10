@@ -45,16 +45,45 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="分类" prop="categoryId" required>
-                <el-select v-model="form.categoryId" placeholder="请选择分类" style="width: 100%">
+              <el-form-item label="一级分类" prop="topCategoryId" required>
+                <el-select 
+                  v-model="form.topCategoryId" 
+                  placeholder="请选择一级分类" 
+                  style="width: 100%"
+                  @change="handleTopCategoryChange"
+                >
                   <el-option
-                    v-for="category in categories"
+                    v-for="topCategory in topCategories"
+                    :key="topCategory.id"
+                    :label="topCategory.name"
+                    :value="topCategory.id"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="二级分类" prop="categoryId" required>
+                <el-select 
+                  v-model="form.categoryId" 
+                  placeholder="请选择二级分类" 
+                  style="width: 100%"
+                  :disabled="!form.topCategoryId"
+                  filterable
+                >
+                  <el-option
+                    v-for="category in filteredCategories"
                     :key="category.id"
                     :label="category.name"
                     :value="category.id"
                   />
                 </el-select>
               </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <!-- 占位，保持布局 -->
             </el-col>
           </el-row>
           
@@ -152,7 +181,9 @@ const saving = ref(false)
 const loading = ref(true)
 const resetting = ref(false)
 const navigatingBack = ref(false)
-const categories = ref([])
+const topCategories = ref([]) // 一级分类列表
+const categories = ref([]) // 所有二级分类列表
+const filteredCategories = ref([]) // 根据一级分类筛选的二级分类
 const previewDialogVisible = ref(false)
 const previewUrl = ref('')
 
@@ -175,7 +206,8 @@ const readonly = computed(() => route.query.readonly === 'true')
 const form = reactive({
   title: '',
   description: '',
-  categoryId: '',
+  topCategoryId: '', // 一级分类ID
+  categoryId: '', // 二级分类ID
   iframeUrl: '',
   imageUrl: ''
 })
@@ -186,8 +218,11 @@ const rules = {
     { required: true, message: '请输入模板标题', trigger: 'blur' },
     { min: 2, max: 100, message: '长度在 2 到 100 个字符', trigger: 'blur' }
   ],
+  topCategoryId: [
+    { required: true, message: '请选择一级分类', trigger: 'change' }
+  ],
   categoryId: [
-    { required: true, message: '请选择分类', trigger: 'change' }
+    { required: true, message: '请选择二级分类', trigger: 'change' }
   ],
   description: [
     { required: true, message: '请输入模板描述', trigger: 'blur' }
@@ -200,13 +235,38 @@ const rules = {
   ]
 }
 
-// 获取分类列表
+// 获取一级分类列表
+const fetchTopCategories = async () => {
+  try {
+    const response = await categoryAPI.getCategories({ level: 1 })
+    topCategories.value = response?.data?.categories || response?.categories || []
+  } catch (error) {
+    console.error('获取一级分类失败:', error)
+  }
+}
+
+// 获取所有二级分类列表
 const fetchCategories = async () => {
   try {
-    const response = await categoryAPI.getCategories()
-    categories.value = response.data.categories || []
+    const response = await categoryAPI.getCategories({ level: 2 })
+    categories.value = response?.data?.categories || response?.categories || []
+    filteredCategories.value = categories.value
   } catch (error) {
     console.error('获取分类失败:', error)
+  }
+}
+
+// 处理一级分类变化
+const handleTopCategoryChange = (topCategoryId) => {
+  // 清空二级分类选择
+  form.categoryId = ''
+  
+  if (topCategoryId) {
+    // 筛选该一级分类下的二级分类
+    filteredCategories.value = categories.value.filter(cat => cat.parentId === topCategoryId)
+  } else {
+    // 显示所有二级分类
+    filteredCategories.value = categories.value
   }
 }
 
@@ -223,9 +283,19 @@ const fetchDataTemplate = async (id) => {
       detailsHtmlLength: template.detailsHtml?.length || 0
     })
     
+    // 获取分类信息以设置一级分类
+    const category = categories.value.find(cat => cat.id === template.categoryId)
+    const topCategoryId = category?.parentId || ''
+    
+    // 如果有一级分类，筛选二级分类
+    if (topCategoryId) {
+      filteredCategories.value = categories.value.filter(cat => cat.parentId === topCategoryId)
+    }
+    
     Object.assign(form, {
       title: template.title || '',
       description: template.description || '',
+      topCategoryId: topCategoryId,
       categoryId: template.categoryId || '',
       iframeUrl: template.iframeUrl || '',
       imageUrl: template.imageUrl || ''
@@ -377,10 +447,12 @@ const handleReset = async () => {
       Object.assign(form, {
         title: '',
         description: '',
+        topCategoryId: '',
         categoryId: '',
         iframeUrl: '',
         imageUrl: ''
       })
+      filteredCategories.value = categories.value
     }
     ElMessage.success('重置成功')
   } catch (error) {
@@ -405,6 +477,7 @@ const handleGoBack = () => {
 onMounted(async () => {
   try {
     loading.value = true
+    await fetchTopCategories()
     await fetchCategories()
     if (isEdit.value) {
       await fetchDataTemplate(route.params.id)

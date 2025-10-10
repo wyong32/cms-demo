@@ -34,8 +34,12 @@
             </el-form-item>
           </el-col>
         </el-row>
+
+        <el-form-item v-if="parentCategoryName" label="所属分类">
+          <el-tag type="primary" size="large">{{ parentCategoryName }}</el-tag>
+        </el-form-item>
         
-        <el-form-item label="分类描述" prop="description" required>
+        <el-form-item label="分类描述" prop="description">
           <el-input
             v-model="form.description"
             type="textarea"
@@ -53,9 +57,8 @@
       </template>
       
       <el-table :data="relatedTemplates" border stripe>
-        <el-table-column prop="name" label="模板名称" min-width="200" />
+        <el-table-column prop="title" label="模板标题" min-width="200" />
         <el-table-column prop="description" label="描述" min-width="250" show-overflow-tooltip />
-        <el-table-column prop="fieldsCount" label="字段数量" width="100" align="center" />
         <el-table-column prop="createdAt" label="创建时间" width="180">
           <template #default="{ row }">
             {{ formatDate(row.createdAt) }}
@@ -84,7 +87,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import { categoryAPI, dataTemplateAPI } from '../api'
+import { categoriesAPI, templateAPI } from '../api'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -94,6 +97,7 @@ const formRef = ref()
 const saving = ref(false)
 const loading = ref(true)
 const relatedTemplates = ref([])
+const parentCategoryName = ref('')
 
 // 计算属性
 const isEdit = computed(() => !!route.params.id)
@@ -103,7 +107,8 @@ const readonly = computed(() => route.query.readonly === 'true')
 const form = reactive({
   name: '',
   type: '',
-  description: ''
+  description: '',
+  parentId: route.query.parentId || '' // 从URL获取父分类ID
 })
 
 // 表单验证规则
@@ -115,10 +120,6 @@ const rules = {
   type: [
     { required: true, message: '请输入分类类型', trigger: 'blur' },
     { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
-  ],
-  description: [
-    { required: true, message: '请输入分类描述', trigger: 'blur' },
-    { max: 500, message: '描述不能超过 500 个字符', trigger: 'blur' }
   ]
 }
 
@@ -127,17 +128,35 @@ const formatDate = (date) => {
   return dayjs(date).format('YYYY-MM-DD HH:mm:ss')
 }
 
+// 获取父分类名称
+const fetchParentCategoryName = async (parentId) => {
+  if (!parentId) return
+  
+  try {
+    const response = await categoriesAPI.getCategory(parentId)
+    parentCategoryName.value = response?.category?.name || ''
+  } catch (error) {
+    console.error('获取父分类名称失败:', error)
+  }
+}
+
 // 获取分类详情
 const fetchCategory = async (id) => {
   try {
-    const response = await categoryAPI.getCategory(id)
-    const category = response.data.category
+    const response = await categoriesAPI.getCategory(id)
+    const category = response?.category
     
     Object.assign(form, {
       name: category.name,
       type: category.type || '',
-      description: category.description || ''
+      description: category.description || '',
+      parentId: category.parentId || ''
     })
+
+    // 获取父分类名称
+    if (category.parentId) {
+      await fetchParentCategoryName(category.parentId)
+    }
   } catch (error) {
     console.error('获取分类失败:', error)
     ElMessage.error('获取分类失败')
@@ -147,8 +166,8 @@ const fetchCategory = async (id) => {
 // 获取关联模板
 const fetchRelatedTemplates = async (categoryId) => {
   try {
-    const response = await dataTemplateAPI.getTemplates({ categoryId })
-    relatedTemplates.value = response.data.templates || []
+    const response = await templateAPI.getTemplates({ categoryId })
+    relatedTemplates.value = response?.templates || []
   } catch (error) {
     console.error('获取关联模板失败:', error)
   }
@@ -170,19 +189,31 @@ const handleSave = async () => {
     
     saving.value = true
     
+    const data = {
+      name: form.name,
+      type: form.type,
+      description: form.description,
+      level: 2, // 固定为二级分类
+      parentId: form.parentId || null
+    }
+    
     if (isEdit.value) {
-      await categoryAPI.updateCategory(route.params.id, form)
+      await categoriesAPI.updateCategory(route.params.id, data)
       ElMessage.success('更新成功')
     } else {
-      await categoryAPI.createCategory(form)
+      await categoriesAPI.createCategory(data)
       ElMessage.success('创建成功')
     }
     
-    router.push({ name: 'Categories' })
+    // 返回到分类列表，带上父分类ID
+    router.push({ 
+      path: '/categories',
+      query: form.parentId ? { parentId: form.parentId } : {}
+    })
   } catch (error) {
-    if (error !== false) { // 验证失败会返回false
+    if (error !== false) {
       console.error('保存失败:', error)
-      ElMessage.error('保存失败')
+      ElMessage.error(error.response?.data?.error || '保存失败')
     }
   } finally {
     saving.value = false
@@ -197,20 +228,30 @@ const handleReset = () => {
     Object.assign(form, {
       name: '',
       type: '',
-      description: ''
+      description: '',
+      parentId: route.query.parentId || ''
     })
   }
 }
 
 // 返回
 const handleGoBack = () => {
-  router.push({ name: 'Categories' })
+  router.push({ 
+    path: '/categories',
+    query: form.parentId ? { parentId: form.parentId } : {}
+  })
 }
 
 // 页面加载时获取数据
 onMounted(async () => {
   try {
     loading.value = true
+    
+    // 如果是新建且有父分类ID，获取父分类名称
+    if (!isEdit.value && form.parentId) {
+      await fetchParentCategoryName(form.parentId)
+    }
+    
     if (isEdit.value) {
       await Promise.all([
         fetchCategory(route.params.id),
@@ -255,7 +296,8 @@ onMounted(async () => {
   gap: 12px;
 }
 
-.form-card, .templates-card {
+.form-card, 
+.templates-card {
   margin-bottom: 20px;
 }
 
@@ -263,12 +305,6 @@ onMounted(async () => {
   margin: 0;
   font-size: 16px;
   color: #303133;
-}
-
-.field-note {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 4px;
 }
 
 /* 响应式样式 */

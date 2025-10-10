@@ -65,10 +65,21 @@
             </el-menu-item>
             
             <!-- 数据分类列表 -->
-            <el-menu-item index="/categories">
-              <el-icon><FolderOpened /></el-icon>
-              <template #title>数据分类列表</template>
-            </el-menu-item>
+            <el-sub-menu index="categories" :popper-offset="0">
+              <template #title>
+                <el-icon><FolderOpened /></el-icon>
+                <span>数据分类列表</span>
+              </template>
+              <el-menu-item 
+                v-for="topCategory in topCategoriesList" 
+                :key="topCategory.id"
+                :index="`/categories?parentId=${topCategory.id}`"
+                @click="handleCategoryClick(topCategory)"
+              >
+                <el-icon><FolderOpened /></el-icon>
+                <template #title>{{ topCategory.name }}</template>
+              </el-menu-item>
+            </el-sub-menu>
             
             <!-- 项目列表 -->
             <el-sub-menu index="projects">
@@ -114,6 +125,10 @@
                 <el-icon><Setting /></el-icon>
                 <span>管理员功能</span>
               </template>
+              <el-menu-item index="/admin/top-categories">
+                <el-icon><FolderOpened /></el-icon>
+                <template #title>一级分类管理</template>
+              </el-menu-item>
               <el-menu-item index="/ai-usage">
                 <el-icon><MagicStick /></el-icon>
                 <template #title>AI使用情况</template>
@@ -165,7 +180,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/counter'
 import { useAppStore } from '../stores/app'
-import { projectAPI } from '../api'
+import { projectAPI, categoriesAPI } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Fold, 
@@ -180,7 +195,8 @@ import {
   Setting, 
   UserFilled,
   Picture,
-  MagicStick
+  MagicStick,
+  Plus
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -190,6 +206,9 @@ const appStore = useAppStore()
 
 // 项目列表
 const projectsList = ref([])
+
+// 一级分类列表
+const topCategoriesList = ref([])
 
 // 当前路由
 const currentRoute = computed(() => route.path)
@@ -250,6 +269,24 @@ const fetchProjects = async () => {
   }
 }
 
+// 获取一级分类列表
+const fetchTopCategories = async () => {
+  try {
+    const response = await categoriesAPI.getCategories({ level: 1 })
+    topCategoriesList.value = response?.data?.categories || response?.categories || []
+  } catch (error) {
+    console.error('获取一级分类列表失败:', error)
+  }
+}
+
+// 处理分类点击
+const handleCategoryClick = (category) => {
+  router.push({ 
+    path: '/categories',
+    query: { parentId: category.id }
+  })
+}
+
 // 处理用户菜单命令
 const handleUserCommand = async (command) => {
   switch (command) {
@@ -289,9 +326,10 @@ watch(
   { immediate: true }
 )
 
-// 组件挂载时获取项目列表
+// 组件挂载时获取项目列表和一级分类列表
 onMounted(() => {
   fetchProjects()
+  fetchTopCategories()
 })
 </script>
 
@@ -385,6 +423,14 @@ onMounted(() => {
 .sidebar-menu {
   border: none;
   height: 100%;
+}
+
+/* 移除所有菜单动画，提升响应速度 */
+.sidebar-menu :deep(.el-sub-menu__title),
+.sidebar-menu :deep(.el-menu-item),
+.sidebar-menu :deep(.el-sub-menu .el-menu),
+.sidebar-menu :deep(.el-sub-menu__icon-arrow) {
+  transition: none !important;
 }
 
 .layout-main {

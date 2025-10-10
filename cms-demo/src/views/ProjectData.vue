@@ -165,22 +165,13 @@
       <div class="template-selector">
         <!-- 分类筛选区域 -->
         <div class="template-filter">
-          <el-select 
-            v-model="selectedCategoryId" 
-            placeholder="选择分类筛选模板" 
-            @change="handleCategoryChange"
-            :loading="categoriesLoading"
-            clearable
-            style="width: 200px"
-          >
-            <el-option label="全部分类" value="" />
-            <el-option 
-              v-for="category in categories"
-              :key="category.id"
-              :label="category.name"
-              :value="category.id"
-            />
-          </el-select>
+          <CascadeCategorySelector 
+            v-model="selectedCategoryId"
+            placeholder="请选择二级分类"
+            top-placeholder="请选择一级分类"
+            :show-count="true"
+            @top-category-change="handleTopCategoryChange"
+          />
           <el-text type="info" size="small" class="filter-tip">
             选择分类可快速筛选相关模板
           </el-text>
@@ -249,6 +240,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Plus, Document, MagicStick, Picture } from '@element-plus/icons-vue'
 import { projectDataAPI, dataTemplateAPI, aiAPI, categoryAPI, projectAPI } from '../api'
+import CascadeCategorySelector from '../components/CascadeCategorySelector.vue'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -449,6 +441,14 @@ const handleAddFromTemplate = () => {
   selectedCategoryId.value = '' // 重置分类选择
   fetchCategories() // 获取分类列表
   fetchTemplates() // 获取模板列表
+}
+
+// 处理一级分类变化
+const handleTopCategoryChange = (topCategoryId) => {
+  // 一级分类变化时，重新加载模板
+  if (topCategoryId) {
+    fetchTemplates()
+  }
 }
 
 // 处理分类筛选变化

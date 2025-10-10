@@ -58,14 +58,12 @@
 
           <!-- 分类选择（模板和项目数据都需要） -->
           <el-form-item label="分类" prop="categoryId" required>
-            <el-select v-model="form.categoryId" placeholder="请选择分类" style="width: 100%">
-              <el-option
-                v-for="category in categories"
-                :key="category.id"
-                :label="category.name"
-                :value="category.id"
-              />
-            </el-select>
+            <CascadeCategorySelector 
+              v-model="form.categoryId"
+              placeholder="请选择二级分类"
+              top-placeholder="请选择一级分类"
+              :show-count="true"
+            />
             <div class="category-tip">
               <el-text type="info" size="small">
                 {{ generateType === 'template' ? '选择分类有助于AI生成更符合分类特征的内容' : '选择分类后，该数据会自动添加到对应分类的数据模板中' }}
@@ -227,6 +225,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Plus, MagicStick, Folder, Close } from '@element-plus/icons-vue'
 import { dataTemplateAPI, categoryAPI, projectAPI, uploadAPI, aiAPI } from '../api'
+import CascadeCategorySelector from '../components/CascadeCategorySelector.vue'
 
 const router = useRouter()
 const route = useRoute()
