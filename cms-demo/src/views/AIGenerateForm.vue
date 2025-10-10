@@ -522,26 +522,28 @@ const handleGenerate = async () => {
     // 检查标题重复
     if (form.title) {
       try {
-        // 1. 检查数据模板中是否重复
-        const templateDuplicateResponse = await dataTemplateAPI.checkDuplicate(form.title)
-        if (templateDuplicateResponse.data.isDuplicate) {
-          const existingTemplate = templateDuplicateResponse.data.existingTemplate
-          await ElMessageBox.confirm(
-            `标题"${form.title}"已存在于数据模板中！\n\n` +
-            `现有模板信息：\n` +
-            `分类：${existingTemplate.categoryName}\n` +
-            `创建时间：${new Date(existingTemplate.createdAt).toLocaleString()}\n\n` +
-            `是否仍要继续生成？这将创建项目数据，但不会创建新的模板。`,
-            '模板标题重复',
-            {
-              confirmButtonText: '继续生成',
-              cancelButtonText: '取消',
-              type: 'warning'
-            }
-          )
+        // 1. 如果是生成模板，或者是项目数据且勾选了"保存为模板"，则检查模板重复
+        if (generateType.value === 'template' || (generateType.value === 'project' && form.saveAsTemplate)) {
+          const templateDuplicateResponse = await dataTemplateAPI.checkDuplicate(form.title)
+          if (templateDuplicateResponse.data.isDuplicate) {
+            const existingTemplate = templateDuplicateResponse.data.existingTemplate
+            await ElMessageBox.confirm(
+              `标题"${form.title}"已存在于数据模板中！\n\n` +
+              `现有模板信息：\n` +
+              `分类：${existingTemplate.categoryName}\n` +
+              `创建时间：${new Date(existingTemplate.createdAt).toLocaleString()}\n\n` +
+              `是否仍要继续生成？${generateType.value === 'template' ? '' : '这将创建项目数据，但不会创建新的模板。'}`,
+              '模板标题重复',
+              {
+                confirmButtonText: '继续生成',
+                cancelButtonText: '取消',
+                type: 'warning'
+              }
+            )
+          }
         }
         
-        // 2. 如果是项目数据类型，还要检查项目内是否重复
+        // 2. 如果是项目数据类型，检查项目内是否重复
         if (generateType.value === 'project' && form.projectId) {
           const projectDuplicateResponse = await projectDataAPI.checkDuplicateInProject(form.projectId, form.title)
           if (projectDuplicateResponse.data.isDuplicate) {

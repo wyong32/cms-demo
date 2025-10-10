@@ -839,8 +839,8 @@ const handleSave = async () => {
           )
         }
         
-        // 2. 如果有分类，检查数据模板中是否重复
-        if (form.categoryId) {
+        // 2. 如果勾选了"保存为模板"，检查数据模板中是否重复
+        if (form.saveAsTemplate && form.categoryId) {
           const templateDuplicateResponse = await dataTemplateAPI.checkDuplicate(form.data.title)
           if (templateDuplicateResponse.data.isDuplicate) {
             const existingTemplate = templateDuplicateResponse.data.existingTemplate
