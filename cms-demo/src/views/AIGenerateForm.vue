@@ -56,17 +56,17 @@
             />
           </el-form-item>
 
-          <!-- 分类选择（模板和项目数据都需要） -->
-          <el-form-item label="分类" prop="categoryId" required>
+          <!-- 分类选择（模板必填，项目数据可选） -->
+          <el-form-item label="分类" prop="categoryId" :required="generateType === 'template'">
             <CascadeCategorySelector 
               v-model="form.categoryId"
-              placeholder="请选择二级分类"
+              :placeholder="generateType === 'template' ? '请选择二级分类' : '请选择二级分类（可选）'"
               top-placeholder="请选择一级分类"
               :show-count="true"
             />
             <div class="category-tip">
               <el-text type="info" size="small">
-                选择分类有助于AI生成更符合分类特征的内容
+                {{ generateType === 'template' ? '选择分类有助于AI生成更符合分类特征的内容' : '选择分类后可保存为模板数据' }}
               </el-text>
             </div>
           </el-form-item>
@@ -280,14 +280,15 @@ const form = reactive({
 })
 
 // 表单验证规则
-const rules = {
+const rules = computed(() => ({
   title: [
     { required: true, message: '请输入标题', trigger: 'blur' },
     { min: 2, max: 100, message: '标题长度在 2 到 100 个字符', trigger: 'blur' }
   ],
-  categoryId: [
+  // 分类：模板类型必填，项目数据类型可选
+  categoryId: generateType.value === 'template' ? [
     { required: true, message: '请选择分类', trigger: 'change' }
-  ],
+  ] : [],
   projectId: generateType.value === 'project' ? [
     { required: true, message: '请选择项目', trigger: 'change' }
   ] : [],
@@ -295,7 +296,7 @@ const rules = {
     { required: true, message: '请输入需求描述', trigger: 'blur' },
     { min: 10, max: 2000, message: '描述长度在 10 到 2000 个字符', trigger: 'blur' }
   ]
-}
+}))
 
 // 获取分类列表
 const fetchCategories = async () => {
@@ -394,6 +395,12 @@ const getImageUrl = (url) => {
 const handleGenerate = async () => {
   try {
     await formRef.value.validate()
+    
+    // 如果是项目数据且勾选了"保存为模板"，则必须选择分类
+    if (generateType.value === 'project' && form.saveAsTemplate && !form.categoryId) {
+      ElMessage.warning('保存为模板时必须选择分类')
+      return
+    }
     
     // 检查标题重复
     if (form.title) {

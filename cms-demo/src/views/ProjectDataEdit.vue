@@ -45,10 +45,10 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="分类" prop="categoryId" required>
+              <el-form-item label="分类" prop="categoryId">
                 <CascadeCategorySelector 
                   v-model="form.categoryId"
-                  placeholder="请选择二级分类"
+                  placeholder="请选择二级分类（可选）"
                   top-placeholder="请选择一级分类"
                   :show-count="true"
                 />
@@ -485,10 +485,7 @@ const otherFields = computed(() => {
 // 动态生成验证规则
 const rules = computed(() => {
   const dynamicRules = {
-    // 分类验证规则
-    categoryId: [
-      { required: true, message: '请选择分类', trigger: 'change' }
-    ]
+    // 分类不再是必填，移除验证规则
   }
   
   projectFields.value.forEach(field => {
@@ -813,6 +810,12 @@ const fetchProjectData = async (id) => {
 const handleSave = async () => {
   try {
     await formRef.value.validate()
+    
+    // 如果勾选了"保存为模板"，则必须选择分类
+    if (form.saveAsTemplate && !form.categoryId) {
+      ElMessage.warning('保存为模板时必须选择分类')
+      return
+    }
     
     // 检查标题重复（仅在新建时检查）
     if (!isEdit.value && form.data.title) {
