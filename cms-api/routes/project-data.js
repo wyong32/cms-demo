@@ -59,7 +59,13 @@ router.get('/', authenticateToken, async (req, res) => {
             select: {
               id: true,
               name: true,
-              type: true
+              type: true,
+              parent: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              }
             }
           },
           creator: {

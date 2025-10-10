@@ -206,6 +206,56 @@
             </el-checkbox-group>
           </el-form-item>
         </div>
+
+        <!-- 自定义字段区块（仅项目数据类型且有自定义字段时显示） -->
+        <div v-if="generateType === 'project' && customFields.length > 0" class="form-section">
+          <h3>自定义字段</h3>
+          <el-alert
+            title="提示"
+            type="info"
+            :closable="false"
+            show-icon
+            style="margin-bottom: 20px"
+          >
+            该项目包含 {{ customFields.length }} 个自定义字段，请填写这些字段的值。AI生成完成后，这些字段的值将被保存到项目数据中。
+          </el-alert>
+          
+          <el-row :gutter="20">
+            <template v-for="field in customFields">
+              <!-- 字符串类型字段 -->
+              <el-col :key="`string-${field.id}`" :span="field.fieldType === 'ARRAY' ? 24 : 12" v-if="field.fieldType === 'STRING'">
+                <el-form-item 
+                  :label="field.fieldName" 
+                  :required="field.isRequired"
+                >
+                  <el-input
+                    v-model="form.customFields[field.fieldName]"
+                    :placeholder="`请输入${field.fieldName}`"
+                  />
+                </el-form-item>
+              </el-col>
+              
+              <!-- 数组类型字段 -->
+              <el-col :key="`array-${field.id}`" :span="24" v-else-if="field.fieldType === 'ARRAY'">
+                <el-form-item 
+                  :label="field.fieldName" 
+                  :required="field.isRequired"
+                >
+                  <el-select
+                    v-model="form.customFields[field.fieldName]"
+                    multiple
+                    filterable
+                    allow-create
+                    default-first-option
+                    :placeholder="`请输入${field.fieldName}，按回车添加`"
+                    style="width: 100%"
+                  >
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </template>
+          </el-row>
+        </div>
       </el-form>
     </el-card>
 
@@ -234,9 +284,9 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Plus, MagicStick, Folder, Close } from '@element-plus/icons-vue'
-import { dataTemplateAPI, categoryAPI, projectAPI, uploadAPI, aiAPI } from '../api'
+import { dataTemplateAPI, categoryAPI, projectAPI, uploadAPI, aiAPI, projectDataAPI } from '../api'
 import CascadeCategorySelector from '../components/CascadeCategorySelector.vue'
 
 const router = useRouter()
@@ -249,12 +299,24 @@ const categories = ref([])
 const projects = ref([])
 const previewDialogVisible = ref(false)
 const previewUrl = ref('')
+const projectFields = ref([]) // 项目字段配置
 
 // 项目信息（用于显示项目名称）
 const projectInfo = ref(null)
 
 // 生成类型：template 或 project
 const generateType = computed(() => route.params.type || 'template')
+
+// 标准字段列表
+const standardFields = ['title', 'description', 'publishDate', 'addressBar', 'iframeUrl', 'imageUrl', 'imageAlt', 'tags', 'seo_title', 'seo_description', 'seo_keywords', 'seoTitle', 'seoDescription', 'seoKeywords', 'detailsHtml']
+
+// 自定义字段（管理员添加的字段）
+const customFields = computed(() => {
+  if (generateType.value !== 'project' || !projectFields.value.length) {
+    return []
+  }
+  return projectFields.value.filter(field => !standardFields.includes(field.fieldName))
+})
 
 // 上传相关
 const uploadHeaders = computed(() => ({
@@ -276,7 +338,8 @@ const form = reactive({
   imageUrl: '',
   iframeUrl: '',
   description: '',
-  generateOptions: ['autoTags', 'autoSEO', 'autoContent', 'autoStructure'] // 默认选中所有选项
+  generateOptions: ['autoTags', 'autoSEO', 'autoContent', 'autoStructure'], // 默认选中所有选项
+  customFields: {} // 自定义字段的值
 })
 
 // 表单验证规则
@@ -333,6 +396,60 @@ const fetchProjectInfo = async (projectId) => {
     })
   } catch (error) {
     console.error('❌ 获取项目信息失败:', error)
+  }
+}
+
+// 获取项目字段配置
+const fetchProjectFields = async (projectId) => {
+  if (!projectId) return
+  
+  try {
+    const response = await projectAPI.getProject(projectId)
+    projectFields.value = response.data.project?.fields || []
+    
+    // 初始化自定义字段的值
+    customFields.value.forEach(field => {
+      if (field.fieldType === 'ARRAY') {
+        form.customFields[field.fieldName] = []
+      } else {
+        form.customFields[field.fieldName] = ''
+      }
+    })
+    
+    console.log('✅ 获取项目字段成功:', {
+      totalFields: projectFields.value.length,
+      customFieldsCount: customFields.value.length,
+      customFieldNames: customFields.value.map(f => f.fieldName)
+    })
+  } catch (error) {
+    console.error('❌ 获取项目字段失败:', error)
+  }
+}
+
+// 获取模板数据并预填充表单
+const fetchTemplateDataForPrefill = async (templateId) => {
+  if (!templateId) return
+  
+  try {
+    const response = await dataTemplateAPI.getTemplate(templateId)
+    const template = response.data.template
+    
+    // 预填充标准字段
+    form.title = template.title || ''
+    form.description = template.description || ''
+    form.imageUrl = template.imageUrl || ''
+    form.iframeUrl = template.iframeUrl || ''
+    form.categoryId = template.categoryId || ''
+    
+    console.log('✅ 已从模板预填充数据:', {
+      title: form.title,
+      categoryId: form.categoryId
+    })
+    
+    ElMessage.success('已从模板预填充基础信息，请补充自定义字段')
+  } catch (error) {
+    console.error('❌ 获取模板数据失败:', error)
+    ElMessage.error('获取模板数据失败')
   }
 }
 
@@ -473,7 +590,8 @@ const handleGenerate = async () => {
       categoryId: form.categoryId, // 现在所有类型都需要分类
       ...(generateType.value === 'project' && { 
         projectId: form.projectId,
-        saveAsTemplate: form.saveAsTemplate // 项目数据类型传递保存为模板参数
+        saveAsTemplate: form.saveAsTemplate, // 项目数据类型传递保存为模板参数
+        customFields: form.customFields // 自定义字段的值
       })
     }
     
@@ -533,6 +651,15 @@ const handleReset = () => {
   form.iframeUrl = ''
   form.description = ''
   form.generateOptions = ['autoTags', 'autoSEO', 'autoContent', 'autoStructure']
+  
+  // 重置自定义字段
+  customFields.value.forEach(field => {
+    if (field.fieldType === 'ARRAY') {
+      form.customFields[field.fieldName] = []
+    } else {
+      form.customFields[field.fieldName] = ''
+    }
+  })
 }
 
 // 清除项目选择
@@ -568,8 +695,15 @@ onMounted(async () => {
     form.projectId = route.query.projectId
     console.log('🎯 自动设置项目ID:', route.query.projectId, '项目名称:', route.query.projectName)
     
-    // 获取项目详细信息
+    // 获取项目详细信息和字段配置
     await fetchProjectInfo(route.query.projectId)
+    await fetchProjectFields(route.query.projectId)
+    
+    // 检测是否来自模板创建（有自定义字段的情况）
+    if (route.query.fromTemplate === 'true' && route.query.templateId) {
+      console.log('🔄 检测到来自模板创建，模板ID:', route.query.templateId)
+      await fetchTemplateDataForPrefill(route.query.templateId)
+    }
   }
 })
 </script>

@@ -670,6 +670,45 @@ const handleCreateFromTemplate = async () => {
       return
     }
 
+    // 检测是否有自定义字段
+    const standardFields = ['title', 'description', 'publishDate', 'addressBar', 'iframeUrl', 'imageUrl', 'imageAlt', 'tags', 'seo_title', 'seo_description', 'seo_keywords', 'seoTitle', 'seoDescription', 'seoKeywords', 'detailsHtml']
+    const projectFields = projectInfo.value?.fields || []
+    const customFields = projectFields.filter(field => !standardFields.includes(field.fieldName))
+    
+    // 如果有自定义字段，提示用户并跳转到AI生成页面
+    if (customFields.length > 0) {
+      aiGenerating.value = false
+      
+      const customFieldNames = customFields.map(f => f.fieldName).join('、')
+      
+      await ElMessageBox.confirm(
+        `该项目包含 ${customFields.length} 个自定义字段：\n\n${customFieldNames}\n\n` +
+        `将跳转到AI生成页面，您可以填写这些字段后重新生成内容。`,
+        '检测到自定义字段',
+        {
+          confirmButtonText: '前往AI生成',
+          cancelButtonText: '取消',
+          type: 'info'
+        }
+      )
+      
+      // 关闭对话框
+      templateDialogVisible.value = false
+      
+      // 跳转到AI生成页面，传递模板ID
+      router.push({
+        name: 'AIGenerateForm',
+        params: { type: 'project' },
+        query: {
+          projectId: projectId.value,
+          projectName: projectName.value,
+          templateId: selectedTemplate.value.id,
+          fromTemplate: 'true'
+        }
+      })
+      return
+    }
+
     // 检查项目内标题是否重复
     if (selectedTemplate.value?.title) {
       try {

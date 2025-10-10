@@ -491,7 +491,7 @@ const rules = computed(() => {
   projectFields.value.forEach(field => {
     if (field.isRequired) {
       dynamicRules[`data.${field.fieldName}`] = [
-        { 
+        {
           required: true, 
           message: `请输入${getFieldLabel(field)}`, 
           trigger: 'blur',

@@ -18,7 +18,8 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
       options = [],
       categoryId,
       projectId,
-      saveAsTemplate // 是否保存为模板（仅项目数据有效）
+      saveAsTemplate, // 是否保存为模板（仅项目数据有效）
+      customFields = {} // 自定义字段的值
     } = req.body;
 
     // 验证必需参数
@@ -153,24 +154,33 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
         detailsHtmlLength: aiGeneratedData.detailsHtml?.length || 0
       });
       
+      // 合并AI生成的数据和自定义字段
+      const projectDataFields = {
+        title: aiGeneratedData.title,
+        description: aiGeneratedData.description,
+        publishDate: new Date().toISOString().split('T')[0],
+        imageUrl: imageUrl || null,
+        imageAlt: aiGeneratedData.imageAlt,
+        iframeUrl: iframeUrl || null,
+        seo_title: aiGeneratedData.seoTitle,
+        seo_description: aiGeneratedData.seoDescription,
+        seo_keywords: aiGeneratedData.seoKeywords,
+        addressBar: aiGeneratedData.addressBar,
+        detailsHtml: aiGeneratedData.detailsHtml,
+        tags: aiGeneratedData.tags,
+        ...customFields // 合并自定义字段
+      };
+      
+      console.log('💾 保存项目数据，包含自定义字段:', {
+        aiGeneratedFields: Object.keys(projectDataFields).filter(k => !Object.keys(customFields).includes(k)),
+        customFields: Object.keys(customFields)
+      });
+      
       createdItem = await prisma.cMSProjectData.create({
         data: {
           projectId,
           categoryId: categoryId || null, // 添加分类ID
-          data: {
-            title: aiGeneratedData.title,
-            description: aiGeneratedData.description,
-            publishDate: new Date().toISOString().split('T')[0],
-            imageUrl: imageUrl || null,
-            imageAlt: aiGeneratedData.imageAlt,
-            iframeUrl: iframeUrl || null,
-            seo_title: aiGeneratedData.seoTitle,
-            seo_description: aiGeneratedData.seoDescription,
-            seo_keywords: aiGeneratedData.seoKeywords,
-            addressBar: aiGeneratedData.addressBar,
-            detailsHtml: aiGeneratedData.detailsHtml,
-            tags: aiGeneratedData.tags
-          },
+          data: projectDataFields,
           isCompleted: false,
           createdBy: req.user.id
         },

@@ -151,7 +151,7 @@
         </el-table-column>
         <el-table-column label="分类" width="120">
           <template #default="{ row }">
-            {{ row.category?.name || '无分类' }}
+            {{ row.category?.parent?.name || row.category?.name || '无分类' }}
           </template>
         </el-table-column>
         <el-table-column label="状态" width="100" align="center">
