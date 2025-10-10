@@ -730,7 +730,7 @@ router.get('/check-duplicate/:projectId/:title', authenticateToken, requireUser,
         projectId,
         data: {
           path: ['title'],
-          string_contains: title.trim()
+          equals: title.trim()
         }
       },
       select: {
