@@ -398,6 +398,10 @@ import { projectDataAPI, projectAPI, templateAPI, categoryAPI, dataTemplateAPI }
 import { useAuthStore } from '../stores/counter'
 import RichTextEditor from '../components/RichTextEditor.vue'
 import CascadeCategorySelector from '../components/CascadeCategorySelector.vue'
+import { getImageUrl } from '../utils/imageHelper'
+import { getUploadAction, getUploadHeaders } from '../utils/uploadHelper'
+import { checkTemplateDuplicate, checkProjectDuplicate } from '../utils/duplicateChecker'
+import { UPLOAD } from '../constants'
 
 const router = useRouter()
 const route = useRoute()
@@ -417,16 +421,9 @@ const previewUrl = ref('')
 // 项目详细信息（用于获取项目名称）
 const projectInfo = ref(null)
 
-// 上传请求头
-const uploadHeaders = computed(() => ({
-  'Authorization': `Bearer ${authStore.token}`
-}))
-
-// 上传地址
-const uploadAction = computed(() => {
-  const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001/api' : 'https://cms-demo-api.vercel.app/api')
-  return `${baseURL}/upload/image`
-})
+// 使用工具函数获取上传配置
+const uploadHeaders = computed(() => getUploadHeaders())
+const uploadAction = computed(() => getUploadAction())
 
 // 计算属性
 const isEdit = computed(() => !!route.params.id)
@@ -567,34 +564,17 @@ const getTextareaRows = (fieldName) => {
   return 4
 }
 
-// 图片相关方法
-const getImageUrl = (url) => {
-  if (!url) return ''
-  
-  // 如果是完整URL（http或https开头），直接返回
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url
-  }
-  
-  // 如果是相对路径（以/api/开头），由于前端代理配置，直接返回
-  if (url.startsWith('/api/')) {
-    return url
-  }
-  
-  // 其他情况，假设是文件名，添加前缀
-  return `/api/uploads/${url}`
-}
 
 const beforeUpload = (file) => {
   const isImage = file.type.startsWith('image/')
-  const isLt5M = file.size / 1024 / 1024 < 5
+  const isLtMaxSize = file.size < UPLOAD.MAX_SIZE
 
   if (!isImage) {
     ElMessage.error('只能上传图片文件!')
     return false
   }
-  if (!isLt5M) {
-    ElMessage.error('图片大小不能超过 5MB!')
+  if (!isLtMaxSize) {
+    ElMessage.error(`图片大小不能超过 ${UPLOAD.MAX_SIZE / 1024 / 1024}MB!`)
     return false
   }
   return true
@@ -774,50 +754,17 @@ const handleSave = async () => {
     if (!isEdit.value && form.data.title) {
       try {
         // 1. 检查项目内是否重复
-        const projectDuplicateResponse = await projectDataAPI.checkDuplicateInProject(projectId.value, form.data.title)
-        if (projectDuplicateResponse.data.isDuplicate) {
-          const existingData = projectDuplicateResponse.data.existingData
-          await ElMessageBox.confirm(
-            `标题"${form.data.title}"在当前项目中已存在！\n\n` +
-            `现有数据信息：\n` +
-            `创建者：${existingData.creator}\n` +
-            `创建时间：${new Date(existingData.createdAt).toLocaleString()}\n\n` +
-            `是否仍要继续保存？这将创建重复的项目数据。`,
-            '项目内标题重复',
-            {
-              confirmButtonText: '继续保存',
-              cancelButtonText: '取消',
-              type: 'warning'
-            }
-          )
-        }
+        await checkProjectDuplicate(projectId.value, form.data.title, '这将创建重复的项目数据。')
         
         // 2. 如果勾选了"保存为模板"，检查数据模板中是否重复
         if (form.saveAsTemplate && form.categoryId) {
-          const templateDuplicateResponse = await dataTemplateAPI.checkDuplicate(form.data.title)
-          if (templateDuplicateResponse.data.isDuplicate) {
-            const existingTemplate = templateDuplicateResponse.data.existingTemplate
-            await ElMessageBox.confirm(
-              `标题"${form.data.title}"已存在于数据模板中！\n\n` +
-              `现有模板信息：\n` +
-              `分类：${existingTemplate.categoryName}\n` +
-              `创建时间：${new Date(existingTemplate.createdAt).toLocaleString()}\n\n` +
-              `是否仍要继续保存？这将创建项目数据，但不会创建新的模板。`,
-              '模板标题重复',
-              {
-                confirmButtonText: '继续保存',
-                cancelButtonText: '取消',
-                type: 'warning'
-              }
-            )
-          }
+          await checkTemplateDuplicate(form.data.title, '这将创建项目数据，但不会创建新的模板。')
         }
-      } catch (duplicateError) {
-        if (duplicateError === 'cancel') {
+      } catch (error) {
+        if (error === 'cancel') {
           return // 用户取消
         }
-        console.error('检查重复失败:', duplicateError)
-        // 继续执行，不阻断流程
+        // 检查失败，继续执行
       }
     }
     

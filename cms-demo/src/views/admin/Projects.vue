@@ -243,6 +243,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { projectAPI } from '../../api/index.js'
+import { PAGINATION } from '../../constants'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -279,8 +280,8 @@ const rules = {
 
 // 分页信息
 const pagination = reactive({
-  page: 1,
-  limit: 20,
+  page: PAGINATION.DEFAULT_PAGE,
+  limit: PAGINATION.DEFAULT_LIMIT,
   total: 0
 })
 

@@ -288,6 +288,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Plus, MagicStick, Folder, Close } from '@element-plus/icons-vue'
 import { dataTemplateAPI, categoryAPI, projectAPI, uploadAPI, aiAPI, projectDataAPI } from '../api'
 import CascadeCategorySelector from '../components/CascadeCategorySelector.vue'
+import { getImageUrl } from '../utils/imageHelper'
+import { getUploadAction, getUploadHeaders } from '../utils/uploadHelper'
+import { checkTemplateDuplicate, checkProjectDuplicate } from '../utils/duplicateChecker'
+import { UPLOAD } from '../constants'
 
 const router = useRouter()
 const route = useRoute()
@@ -318,16 +322,9 @@ const customFields = computed(() => {
   return projectFields.value.filter(field => !standardFields.includes(field.fieldName))
 })
 
-// 上传相关
-const uploadHeaders = computed(() => ({
-  Authorization: `Bearer ${localStorage.getItem('cms_token')}`
-}))
-
-// 上传地址
-const uploadAction = computed(() => {
-  const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001/api' : 'https://cms-demo-api.vercel.app/api')
-  return `${baseURL}/upload/image`
-})
+// 使用工具函数获取上传配置
+const uploadHeaders = computed(() => getUploadHeaders())
+const uploadAction = computed(() => getUploadAction())
 
 // 表单数据
 const form = reactive({
@@ -441,14 +438,14 @@ const fetchTemplateDataForPrefill = async (templateId) => {
 // 上传前验证
 const beforeUpload = (file) => {
   const isImage = file.type.startsWith('image/')
-  const isLt5M = file.size / 1024 / 1024 < 5
+  const isLtMaxSize = file.size < UPLOAD.MAX_SIZE
 
   if (!isImage) {
     ElMessage.error('只能上传图片文件！')
     return false
   }
-  if (!isLt5M) {
-    ElMessage.error('图片大小不能超过 5MB！')
+  if (!isLtMaxSize) {
+    ElMessage.error(`图片大小不能超过 ${UPLOAD.MAX_SIZE / 1024 / 1024}MB！`)
     return false
   }
   return true
@@ -481,16 +478,112 @@ const handlePreviewIframe = () => {
   previewDialogVisible.value = true
 }
 
-// 获取图片URL
-const getImageUrl = (url) => {
-  if (!url) return ''
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url
+// 处理AI错误
+const handleAIError = (errorData, statusCode = null) => {
+  if (!errorData) {
+    ElMessage.error('AI生成失败，请稍后重试')
+    return
   }
-  if (url.startsWith('/api/')) {
-    return url
+  
+  // 配额超限错误（429）
+  if (statusCode === 429 || errorData.code === 'QUOTA_EXCEEDED') {
+    const retryAfter = errorData.retryAfter || errorData.details?.retryAfter
+    let message = errorData.error || 'AI服务配额已用完'
+    
+    if (retryAfter) {
+      const retrySeconds = typeof retryAfter === 'string' 
+        ? parseInt(retryAfter.replace('s', '')) 
+        : retryAfter
+      const retryMinutes = Math.ceil(retrySeconds / 60)
+      message += `，建议 ${retryMinutes} 分钟后重试`
+    }
+    
+    if (errorData.suggestion) {
+      message += `\n${errorData.suggestion}`
+    }
+    
+    ElMessage({
+      message: message,
+      type: 'warning',
+      duration: 8000,
+      showClose: true
+    })
+    
+    // 如果有帮助链接，可以在控制台输出
+    if (errorData.details?.helpUrl) {
+      console.warn('配额限制帮助:', errorData.details.helpUrl)
+    }
+    return
   }
-  return `/api/uploads/${url}`
+  
+  // API密钥错误
+  if (errorData.code === 'INVALID_API_KEY') {
+    ElMessage({
+      message: errorData.error || 'AI服务API密钥无效',
+      type: 'error',
+      duration: 6000,
+      showClose: true
+    })
+    if (errorData.suggestion) {
+      console.error('配置建议:', errorData.suggestion)
+    }
+    return
+  }
+  
+  // 权限错误
+  if (statusCode === 403 || errorData.code === 'PERMISSION_DENIED') {
+    ElMessage({
+      message: errorData.error || 'AI服务权限被拒绝',
+      type: 'error',
+      duration: 6000,
+      showClose: true
+    })
+    if (errorData.suggestion) {
+      console.error('权限建议:', errorData.suggestion)
+    }
+    return
+  }
+  
+  // 其他错误
+  const errorMessage = errorData.error || 'AI生成失败'
+  const suggestion = errorData.suggestion ? `\n${errorData.suggestion}` : ''
+  
+  ElMessage({
+    message: errorMessage + suggestion,
+    type: 'error',
+    duration: 6000,
+    showClose: true
+  })
+}
+
+// 处理配额警告（使用模拟数据）
+const handleQuotaWarning = (warning) => {
+  const retryAfter = warning.retryAfter || warning.details?.retryAfter
+  let message = warning.message || 'AI服务配额已用完，已使用模拟数据生成内容'
+  
+  if (retryAfter) {
+    const retrySeconds = typeof retryAfter === 'string' 
+      ? parseInt(retryAfter.replace('s', '')) 
+      : retryAfter
+    const retryMinutes = Math.ceil(retrySeconds / 60)
+    message += `\n建议 ${retryMinutes} 分钟后重试真实AI生成`
+  }
+  
+  if (warning.suggestion) {
+    message += `\n${warning.suggestion}`
+  }
+  
+  ElMessage({
+    message: message,
+    type: 'warning',
+    duration: 10000,
+    showClose: true
+  })
+  
+  // 如果有帮助链接，可以在控制台输出
+  if (warning.details?.helpUrl) {
+    console.warn('配额限制帮助:', warning.details.helpUrl)
+  }
 }
 
 // AI生成处理
@@ -509,51 +602,19 @@ const handleGenerate = async () => {
       try {
         // 1. 如果是生成模板，或者是项目数据且勾选了"保存为模板"，则检查模板重复
         if (generateType.value === 'template' || (generateType.value === 'project' && form.saveAsTemplate)) {
-          const templateDuplicateResponse = await dataTemplateAPI.checkDuplicate(form.title)
-          if (templateDuplicateResponse.data.isDuplicate) {
-            const existingTemplate = templateDuplicateResponse.data.existingTemplate
-            await ElMessageBox.confirm(
-              `标题"${form.title}"已存在于数据模板中！\n\n` +
-              `现有模板信息：\n` +
-              `分类：${existingTemplate.categoryName}\n` +
-              `创建时间：${new Date(existingTemplate.createdAt).toLocaleString()}\n\n` +
-              `是否仍要继续生成？${generateType.value === 'template' ? '' : '这将创建项目数据，但不会创建新的模板。'}`,
-              '模板标题重复',
-              {
-                confirmButtonText: '继续生成',
-                cancelButtonText: '取消',
-                type: 'warning'
-              }
-            )
-          }
+          const context = generateType.value === 'template' ? '' : '这将创建项目数据，但不会创建新的模板。'
+          await checkTemplateDuplicate(form.title, context)
         }
         
         // 2. 如果是项目数据类型，检查项目内是否重复
         if (generateType.value === 'project' && form.projectId) {
-          const projectDuplicateResponse = await projectDataAPI.checkDuplicateInProject(form.projectId, form.title)
-          if (projectDuplicateResponse.data.isDuplicate) {
-            const existingData = projectDuplicateResponse.data.existingData
-            await ElMessageBox.confirm(
-              `标题"${form.title}"在当前项目中已存在！\n\n` +
-              `现有数据信息：\n` +
-              `创建者：${existingData.creator}\n` +
-              `创建时间：${new Date(existingData.createdAt).toLocaleString()}\n\n` +
-              `是否仍要继续生成？这将创建重复的项目数据。`,
-              '项目内标题重复',
-              {
-                confirmButtonText: '继续生成',
-                cancelButtonText: '取消',
-                type: 'warning'
-              }
-            )
-          }
+          await checkProjectDuplicate(form.projectId, form.title, '这将创建重复的项目数据。')
         }
-      } catch (duplicateError) {
-        if (duplicateError === 'cancel') {
+      } catch (error) {
+        if (error === 'cancel') {
           return // 用户取消
         }
-        console.error('检查重复失败:', duplicateError)
-        // 继续执行，不阻断流程
+        // 检查失败，继续执行
       }
     }
     
@@ -586,6 +647,11 @@ const handleGenerate = async () => {
     const response = await aiAPI.generate(generateData)
     
     if (response.data.success) {
+      // 检查是否有警告信息（配额超限，使用模拟数据）
+      if (response.data.warning) {
+        handleQuotaWarning(response.data.warning)
+      }
+      
       // 根据类型和是否保存为模板显示不同提示
       if (generateType.value === 'template') {
         ElMessage.success('AI生成成功！正在跳转...')
@@ -607,17 +673,20 @@ const handleGenerate = async () => {
         })
       }
     } else {
-      ElMessage.error(response.data.error || 'AI生成失败')
+      // 处理API返回的错误
+      const errorData = response.data
+      handleAIError(errorData)
     }
     
   } catch (error) {
     console.error('AI生成失败:', error)
     
-    // 根据错误类型提供不同的提示
-    if (error.code === 'ECONNABORTED') {
+    // 处理HTTP错误响应
+    if (error.response) {
+      const errorData = error.response.data
+      handleAIError(errorData, error.response.status)
+    } else if (error.code === 'ECONNABORTED') {
       ElMessage.error('AI生成超时，请检查网络连接或稍后重试')
-    } else if (error.response) {
-      ElMessage.error(error.response.data?.error || 'AI生成失败，请稍后重试')
     } else {
       ElMessage.error('AI生成失败，请检查网络连接')
     }

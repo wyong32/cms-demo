@@ -57,14 +57,61 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
     }
 
     // 调用AI服务生成内容
-    const aiGeneratedData = await aiService.generateContent({
-      title,
-      description,
-      imageUrl,
-      iframeUrl,
-      options,
-      categoryInfo
-    });
+    let aiGeneratedData;
+    let quotaWarning = null;
+    
+    try {
+      aiGeneratedData = await aiService.generateContent({
+        title,
+        description,
+        imageUrl,
+        iframeUrl,
+        options,
+        categoryInfo
+      });
+      
+      // 检查是否包含配额警告（使用模拟数据）
+      if (aiGeneratedData && aiGeneratedData._quotaWarning) {
+        quotaWarning = aiGeneratedData._quotaWarning;
+        // 移除警告标记，保留数据
+        delete aiGeneratedData._quotaWarning;
+      }
+    } catch (aiError) {
+      // 处理AI服务错误（非配额错误）
+      if (aiError.code === 'INVALID_API_KEY') {
+        return res.status(400).json({
+          success: false,
+          error: aiError.message,
+          code: aiError.code,
+          suggestion: '请检查环境变量GOOGLE_API_KEY是否正确配置'
+        });
+      }
+      
+      if (aiError.code === 'PERMISSION_DENIED') {
+        return res.status(403).json({
+          success: false,
+          error: aiError.message,
+          code: aiError.code,
+          suggestion: '请检查API密钥权限设置'
+        });
+      }
+      
+      // 其他AI服务错误，使用模拟数据作为降级方案
+      console.warn('AI服务调用失败，使用模拟数据:', aiError.message);
+      aiGeneratedData = aiService.generateMockContent({
+        title,
+        description,
+        imageUrl,
+        iframeUrl,
+        options,
+        categoryInfo
+      });
+      quotaWarning = {
+        code: 'AI_SERVICE_ERROR',
+        message: 'AI服务调用失败，已使用模拟数据生成内容',
+        suggestion: '请稍后重试或检查AI服务配置'
+      };
+    }
 
     let createdItem;
 
@@ -241,7 +288,8 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
     res.status(201).json({
       success: true,
       message: `AI生成${type === 'template' ? '数据模板' : '项目数据'}成功`,
-      data: createdItem
+      data: createdItem,
+      ...(quotaWarning && { warning: quotaWarning })
     });
 
   } catch (error) {
@@ -297,18 +345,66 @@ router.post('/generate-from-template', authenticateToken, requireUser, async (re
     }
 
     // 调用AI服务生成内容
-    const aiGeneratedData = await aiService.generateContent({
-      title,
-      description,
-      imageUrl,
-      iframeUrl,
-      options,
-      categoryInfo
-    });
+    let aiGeneratedData;
+    let quotaWarning = null;
+    
+    try {
+      aiGeneratedData = await aiService.generateContent({
+        title,
+        description,
+        imageUrl,
+        iframeUrl,
+        options,
+        categoryInfo
+      });
+      
+      // 检查是否包含配额警告（使用模拟数据）
+      if (aiGeneratedData && aiGeneratedData._quotaWarning) {
+        quotaWarning = aiGeneratedData._quotaWarning;
+        // 移除警告标记，保留数据
+        delete aiGeneratedData._quotaWarning;
+      }
+    } catch (aiError) {
+      // 处理AI服务错误（非配额错误）
+      if (aiError.code === 'INVALID_API_KEY') {
+        return res.status(400).json({
+          success: false,
+          error: aiError.message,
+          code: aiError.code,
+          suggestion: '请检查环境变量GOOGLE_API_KEY是否正确配置'
+        });
+      }
+      
+      if (aiError.code === 'PERMISSION_DENIED') {
+        return res.status(403).json({
+          success: false,
+          error: aiError.message,
+          code: aiError.code,
+          suggestion: '请检查API密钥权限设置'
+        });
+      }
+      
+      // 其他AI服务错误，使用模拟数据作为降级方案
+      console.warn('AI服务调用失败，使用模拟数据:', aiError.message);
+      aiGeneratedData = aiService.generateMockContent({
+        title,
+        description,
+        imageUrl,
+        iframeUrl,
+        options,
+        categoryInfo
+      });
+      quotaWarning = {
+        code: 'AI_SERVICE_ERROR',
+        message: 'AI服务调用失败，已使用模拟数据生成内容',
+        suggestion: '请稍后重试或检查AI服务配置'
+      };
+    }
 
     res.json({
       success: true,
-      data: aiGeneratedData
+      data: aiGeneratedData,
+      ...(quotaWarning && { warning: quotaWarning })
     });
 
   } catch (error) {

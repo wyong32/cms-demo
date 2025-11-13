@@ -274,6 +274,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { projectDataAPI, projectAPI, categoryAPI } from '../api'
+import { PAGINATION } from '../constants'
 import dayjs from 'dayjs'
 
 const loading = ref(false)
@@ -309,8 +310,8 @@ const searchForm = reactive({
 
 // 分页信息
 const pagination = reactive({
-  page: 1,
-  limit: 20,
+  page: PAGINATION.DEFAULT_PAGE,
+  limit: PAGINATION.DEFAULT_LIMIT,
   total: 0
 })
 

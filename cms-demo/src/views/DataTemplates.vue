@@ -175,6 +175,9 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Picture } from '@element-plus/icons-vue'
 import { dataTemplateAPI, categoryAPI } from '../api'
+import { getImageUrl } from '../utils/imageHelper'
+import { getUploadAction, getUploadHeaders } from '../utils/uploadHelper'
+import { PAGINATION } from '../constants'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -200,8 +203,8 @@ const searchForm = reactive({
 
 // 分页信息
 const pagination = reactive({
-  page: 1,
-  limit: 32, // 默认32个，适合8列x4行
+  page: PAGINATION.DEFAULT_PAGE,
+  limit: 32, // 默认32个，适合8列x4行（特殊需求，不使用默认值）
   total: 0
 })
 
@@ -417,15 +420,6 @@ const handleTemplateSelect = (template, checked) => {
   } else {
     selectedRows.value = selectedRows.value.filter(item => item.id !== template.id)
   }
-}
-
-// 获取图片URL
-const getImageUrl = (url) => {
-  if (!url) return ''
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url
-  }
-  return `/api/uploads/${url}`
 }
 
 // 处理分类选择变化

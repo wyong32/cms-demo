@@ -171,6 +171,10 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Plus } from '@element-plus/icons-vue'
 import { dataTemplateAPI, categoryAPI, uploadAPI } from '../api'
+import { getImageUrl } from '../utils/imageHelper'
+import { getUploadAction, getUploadHeaders } from '../utils/uploadHelper'
+import { checkTemplateDuplicate } from '../utils/duplicateChecker'
+import { UPLOAD } from '../constants'
 
 const router = useRouter()
 const route = useRoute()
@@ -187,16 +191,9 @@ const filteredCategories = ref([]) // 根据一级分类筛选的二级分类
 const previewDialogVisible = ref(false)
 const previewUrl = ref('')
 
-// 上传相关
-const uploadHeaders = computed(() => ({
-  Authorization: `Bearer ${localStorage.getItem('cms_token')}`
-}))
-
-// 上传地址
-const uploadAction = computed(() => {
-  const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001/api' : 'https://cms-demo-api.vercel.app/api')
-  return `${baseURL}/upload/image`
-})
+// 使用工具函数获取上传配置
+const uploadHeaders = computed(() => getUploadHeaders())
+const uploadAction = computed(() => getUploadAction())
 
 // 计算属性
 const isEdit = computed(() => !!route.params.id)
@@ -302,14 +299,14 @@ const fetchDataTemplate = async (id) => {
 // 上传前验证
 const beforeUpload = (file) => {
   const isImage = file.type.startsWith('image/')
-  const isLt5M = file.size / 1024 / 1024 < 5
+  const isLtMaxSize = file.size < UPLOAD.MAX_SIZE
 
   if (!isImage) {
     ElMessage.error('只能上传图片文件！')
     return false
   }
-  if (!isLt5M) {
-    ElMessage.error('图片大小不能超过 5MB！')
+  if (!isLtMaxSize) {
+    ElMessage.error(`图片大小不能超过 ${UPLOAD.MAX_SIZE / 1024 / 1024}MB！`)
     return false
   }
   return true
@@ -342,24 +339,6 @@ const handlePreviewIframe = () => {
   previewDialogVisible.value = true
 }
 
-// 获取图片URL
-const getImageUrl = (url) => {
-  if (!url) return ''
-  
-  // 如果是完整URL（http或https开头），直接返回
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url
-  }
-  
-  // 如果是相对路径（以/api/开头），由于前端代理配置，直接返回
-  if (url.startsWith('/api/')) {
-    return url
-  }
-  
-  // 其他情况，假设是文件名，添加前缀
-  return `/api/uploads/${url}`
-}
-
 // 保存
 const handleSave = async () => {
   try {
@@ -368,29 +347,12 @@ const handleSave = async () => {
     // 检查模板标题重复（仅在新建时检查）
     if (!isEdit.value && form.title) {
       try {
-        const duplicateResponse = await dataTemplateAPI.checkDuplicate(form.title)
-        if (duplicateResponse.data.isDuplicate) {
-          const existingTemplate = duplicateResponse.data.existingTemplate
-          await ElMessageBox.confirm(
-            `标题"${form.title}"已存在于数据模板中！\n\n` +
-            `现有模板信息：\n` +
-            `分类：${existingTemplate.categoryName}\n` +
-            `创建时间：${new Date(existingTemplate.createdAt).toLocaleString()}\n\n` +
-            `是否仍要继续保存？这将创建重复的数据模板。`,
-            '模板标题重复',
-            {
-              confirmButtonText: '继续保存',
-              cancelButtonText: '取消',
-              type: 'warning'
-            }
-          )
-        }
-      } catch (duplicateError) {
-        if (duplicateError === 'cancel') {
+        await checkTemplateDuplicate(form.title, '这将创建重复的数据模板。')
+      } catch (error) {
+        if (error === 'cancel') {
           return // 用户取消
         }
-        console.error('检查重复失败:', duplicateError)
-        // 继续执行，不阻断流程
+        // 检查失败，继续执行
       }
     }
     

@@ -205,6 +205,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { authAPI } from '../../api/index.js'
 import { useAuthStore } from '../../stores/counter.js'
+import { PAGINATION } from '../../constants'
 import dayjs from 'dayjs'
 
 const authStore = useAuthStore()
@@ -248,8 +249,8 @@ const rules = {
 
 // 分页信息
 const pagination = reactive({
-  page: 1,
-  limit: 10,
+  page: PAGINATION.DEFAULT_PAGE,
+  limit: 10, // 用户列表使用较小的分页（特殊需求）
   total: 0
 })
 

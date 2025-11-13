@@ -90,6 +90,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { categoriesAPI } from '../api'
+import { PAGINATION } from '../constants'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -108,8 +109,8 @@ const searchForm = reactive({
 
 // 分页信息
 const pagination = reactive({
-  page: 1,
-  limit: 20,
+  page: PAGINATION.DEFAULT_PAGE,
+  limit: PAGINATION.DEFAULT_LIMIT,
   total: 0
 })
 

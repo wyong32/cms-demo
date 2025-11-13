@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/counter.js'
+import { API_TIMEOUT } from '../constants'
 
 // 创建axios实例
 const api = axios.create({
@@ -28,7 +29,7 @@ api.interceptors.request.use(
     
     // 为AI生成接口设置更长的超时时间
     if (config.url && config.url.includes('/ai/generate')) {
-      config.timeout = 60000 // AI生成设置60秒超时
+      config.timeout = API_TIMEOUT.AI_GENERATE
     }
     
     return config
@@ -78,6 +79,10 @@ api.interceptors.response.use(
           break
         case 405:
           ElMessage.error('请求方法不被允许，请检查API配置')
+          break
+        case 429:
+          // 429错误（配额超限）由具体业务逻辑处理，这里不显示通用错误
+          // 避免重复显示错误信息
           break
         case 500:
           ElMessage.error(data.error || '服务器内部错误')

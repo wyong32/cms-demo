@@ -201,8 +201,75 @@ class AIService {
       }
     } catch (error) {
       console.error('Gemini API调用失败:', error);
-      // 如果API调用失败，返回模拟数据
-      return this.generateMockContent({ title, description, imageUrl, iframeUrl, options });
+      
+      // 检查是否是配额限制错误（429）
+      if (error.status === 429 || (error.message && error.message.includes('429'))) {
+        // 提取重试延迟信息
+        let retryDelay = null;
+        if (error.errorDetails) {
+          const retryInfo = error.errorDetails.find(detail => detail['@type'] === 'type.googleapis.com/google.rpc.RetryInfo');
+          if (retryInfo && retryInfo.retryDelay) {
+            retryDelay = retryInfo.retryDelay;
+          }
+        }
+        
+        // 提取配额违规信息
+        const quotaViolations = [];
+        if (error.errorDetails) {
+          const quotaFailure = error.errorDetails.find(detail => detail['@type'] === 'type.googleapis.com/google.rpc.QuotaFailure');
+          if (quotaFailure && quotaFailure.violations) {
+            quotaViolations.push(...quotaFailure.violations);
+          }
+        }
+        
+        // 使用模拟数据作为降级方案，而不是抛出错误
+        const mockData = this.generateMockContent({ title, description, imageUrl, iframeUrl, options, categoryInfo });
+        
+        // 返回包含警告信息的结果对象
+        return {
+          ...mockData,
+          _quotaWarning: {
+            code: 'QUOTA_EXCEEDED',
+            message: 'Gemini API免费配额已用完，已使用模拟数据生成内容',
+            retryDelay: retryDelay,
+            details: {
+              provider: 'gemini',
+              model: 'gemini-2.0-flash-exp',
+              retryAfter: retryDelay,
+              helpUrl: 'https://ai.google.dev/gemini-api/docs/rate-limits',
+              usageUrl: 'https://ai.dev/usage?tab=rate-limit'
+            },
+            suggestion: '请等待配额重置（通常按分钟/小时重置）或升级到付费计划'
+          }
+        };
+      }
+      
+      // 检查是否是API密钥错误
+      if (error.message && (error.message.includes('API_KEY') || error.message.includes('API key'))) {
+        const apiKeyError = new Error('AI服务API密钥无效');
+        apiKeyError.name = 'APIKeyError';
+        apiKeyError.code = 'INVALID_API_KEY';
+        apiKeyError.message = 'Gemini API密钥无效或未配置，请检查环境变量GOOGLE_API_KEY';
+        throw apiKeyError;
+      }
+      
+      // 检查是否是权限错误
+      if (error.status === 403 || (error.message && error.message.includes('PERMISSION_DENIED'))) {
+        const permissionError = new Error('AI服务权限被拒绝');
+        permissionError.name = 'PermissionError';
+        permissionError.status = 403;
+        permissionError.code = 'PERMISSION_DENIED';
+        permissionError.message = 'Gemini API权限被拒绝，请检查API密钥权限设置';
+        throw permissionError;
+      }
+      
+      // 其他错误，抛出通用错误
+      const genericError = new Error('AI服务调用失败');
+      genericError.name = 'AIServiceError';
+      genericError.code = 'AI_SERVICE_ERROR';
+      genericError.originalError = error;
+      genericError.message = error.message || 'AI服务调用失败，请稍后重试';
+      throw genericError;
     }
   }
 

@@ -94,6 +94,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Calendar } from '@element-plus/icons-vue'
 import { projectAPI } from '../api'
+import { PAGINATION } from '../constants'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -109,8 +110,8 @@ const searchForm = reactive({
 
 // 分页信息
 const pagination = reactive({
-  page: 1,
-  limit: 12,
+  page: PAGINATION.DEFAULT_PAGE,
+  limit: 12, // 项目列表使用12个每页（特殊需求，适合卡片布局）
   total: 0
 })
 

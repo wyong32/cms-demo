@@ -288,6 +288,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { logAPI } from '../api'
 import { useAuthStore } from '../stores/counter'
+import { PAGINATION } from '../constants'
 import dayjs from 'dayjs'
 
 const authStore = useAuthStore()
@@ -322,8 +323,8 @@ const cleanupForm = reactive({
 
 // 分页信息
 const pagination = reactive({
-  page: 1,
-  limit: 20,
+  page: PAGINATION.DEFAULT_PAGE,
+  limit: PAGINATION.DEFAULT_LIMIT,
   total: 0
 })
 

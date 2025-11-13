@@ -229,6 +229,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Picture, FolderOpened, Search, View, Refresh, Document, Collection, Folder, Link } from '@element-plus/icons-vue'
 import { uploadAPI } from '../api'
+import { getImageUrl } from '../utils/imageHelper'
 
 const router = useRouter()
 
@@ -358,23 +359,6 @@ const viewSource = (image) => {
   }
 }
 
-// 获取图片URL
-const getImageUrl = (url) => {
-  if (!url) return ''
-  
-  // 如果是完整URL（http或https开头），直接返回
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url
-  }
-  
-  // 如果是相对路径（以/api/开头），由于前端代理配置，直接返回
-  if (url.startsWith('/api/')) {
-    return url
-  }
-  
-  // 其他情况，假设是文件名，添加前缀
-  return `/api/uploads/${url}`
-}
 
 // 复制图片URL
 const copyImageUrl = async () => {

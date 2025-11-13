@@ -256,6 +256,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Plus, Document, MagicStick, Picture } from '@element-plus/icons-vue'
 import { projectDataAPI, dataTemplateAPI, aiAPI, categoryAPI, projectAPI } from '../api'
 import CascadeCategorySelector from '../components/CascadeCategorySelector.vue'
+import { getImageUrl } from '../utils/imageHelper'
+import { checkProjectDuplicate } from '../utils/duplicateChecker'
+import { PAGINATION } from '../constants'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -279,8 +282,8 @@ const categoriesLoading = ref(false)
 
 // 模板分页信息
 const templatePagination = reactive({
-  page: 1,
-  limit: 20,
+  page: PAGINATION.DEFAULT_PAGE,
+  limit: PAGINATION.DEFAULT_LIMIT,
   total: 0
 })
 
@@ -312,8 +315,8 @@ const templateForm = reactive({
 
 // 分页信息
 const pagination = reactive({
-  page: 1,
-  limit: 20,
+  page: PAGINATION.DEFAULT_PAGE,
+  limit: PAGINATION.DEFAULT_LIMIT,
   total: 0
 })
 
@@ -456,6 +459,103 @@ const handleAdd = () => {
     })
     navigatingToAdd.value = false
   }, 200)
+}
+
+// 处理AI错误
+const handleAIError = (errorData, statusCode = null) => {
+  if (!errorData) {
+    ElMessage.error('AI生成失败，请稍后重试')
+    return
+  }
+  
+  // 配额超限错误（429）
+  if (statusCode === 429 || errorData.code === 'QUOTA_EXCEEDED') {
+    const retryAfter = errorData.retryAfter || errorData.details?.retryAfter
+    let message = errorData.error || 'AI服务配额已用完'
+    
+    if (retryAfter) {
+      const retrySeconds = typeof retryAfter === 'string' 
+        ? parseInt(retryAfter.replace('s', '')) 
+        : retryAfter
+      const retryMinutes = Math.ceil(retrySeconds / 60)
+      message += `，建议 ${retryMinutes} 分钟后重试`
+    }
+    
+    if (errorData.suggestion) {
+      message += `\n${errorData.suggestion}`
+    }
+    
+    ElMessage({
+      message: message,
+      type: 'warning',
+      duration: 8000,
+      showClose: true
+    })
+    return
+  }
+  
+  // API密钥错误
+  if (errorData.code === 'INVALID_API_KEY') {
+    ElMessage({
+      message: errorData.error || 'AI服务API密钥无效',
+      type: 'error',
+      duration: 6000,
+      showClose: true
+    })
+    return
+  }
+  
+  // 权限错误
+  if (statusCode === 403 || errorData.code === 'PERMISSION_DENIED') {
+    ElMessage({
+      message: errorData.error || 'AI服务权限被拒绝',
+      type: 'error',
+      duration: 6000,
+      showClose: true
+    })
+    return
+  }
+  
+  // 其他错误
+  const errorMessage = errorData.error || 'AI生成失败'
+  const suggestion = errorData.suggestion ? `\n${errorData.suggestion}` : ''
+  
+  ElMessage({
+    message: errorMessage + suggestion,
+    type: 'error',
+    duration: 6000,
+    showClose: true
+  })
+}
+
+// 处理配额警告（使用模拟数据）
+const handleQuotaWarning = (warning) => {
+  const retryAfter = warning.retryAfter || warning.details?.retryAfter
+  let message = warning.message || 'AI服务配额已用完，已使用模拟数据生成内容'
+  
+  if (retryAfter) {
+    const retrySeconds = typeof retryAfter === 'string' 
+      ? parseInt(retryAfter.replace('s', '')) 
+      : retryAfter
+    const retryMinutes = Math.ceil(retrySeconds / 60)
+    message += `\n建议 ${retryMinutes} 分钟后重试真实AI生成`
+  }
+  
+  if (warning.suggestion) {
+    message += `\n${warning.suggestion}`
+  }
+  
+  ElMessage({
+    message: message,
+    type: 'warning',
+    duration: 10000,
+    showClose: true
+  })
+  
+  // 如果有帮助链接，可以在控制台输出
+  if (warning.details?.helpUrl) {
+    console.warn('配额限制帮助:', warning.details.helpUrl)
+  }
 }
 
 // 处理从模板创建
@@ -723,20 +823,6 @@ const handleSelectTemplate = (template) => {
 }
 
 
-// 获取图片URL
-const getImageUrl = (url) => {
-  if (!url) return ''
-  // 如果是完整URL（http或https开头），直接返回
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url
-  }
-  // 如果是相对路径（以/api/开头），直接返回
-  if (url.startsWith('/api/')) {
-    return url
-  }
-  // 其他情况，假设是文件名，添加前缀
-  return `/api/uploads/${url}`
-}
 
 // 处理从模板创建
 const handleCreateFromTemplate = async () => {
@@ -797,30 +883,13 @@ const handleCreateFromTemplate = async () => {
     // 检查项目内标题是否重复
     if (selectedTemplate.value?.title) {
       try {
-        const projectDuplicateResponse = await projectDataAPI.checkDuplicateInProject(projectId.value, selectedTemplate.value.title)
-        if (projectDuplicateResponse.data.isDuplicate) {
-          const existingData = projectDuplicateResponse.data.existingData
-          await ElMessageBox.confirm(
-            `模板标题"${selectedTemplate.value.title}"在当前项目中已存在！\n\n` +
-            `现有数据信息：\n` +
-            `创建者：${existingData.creator}\n` +
-            `创建时间：${new Date(existingData.createdAt).toLocaleString()}\n\n` +
-            `是否仍要继续创建？这将创建重复的项目数据。`,
-            '项目内标题重复',
-            {
-              confirmButtonText: '继续创建',
-              cancelButtonText: '取消',
-              type: 'warning'
-            }
-          )
-        }
-      } catch (duplicateError) {
-        if (duplicateError === 'cancel') {
+        await checkProjectDuplicate(projectId.value, selectedTemplate.value.title, '这将创建重复的项目数据。')
+      } catch (error) {
+        if (error === 'cancel') {
           aiGenerating.value = false
           return // 用户取消
         }
-        console.error('检查重复失败:', duplicateError)
-        // 继续执行，不阻断流程
+        // 检查失败，继续执行
       }
     }
 
@@ -837,6 +906,11 @@ const handleCreateFromTemplate = async () => {
     })
 
     if (aiResponse.data.success) {
+      // 检查是否有警告信息（配额超限，使用模拟数据）
+      if (aiResponse.data.warning) {
+        handleQuotaWarning(aiResponse.data.warning)
+      }
+      
       // 创建项目数据
       const projectData = {
         projectId: projectId.value,
@@ -866,11 +940,18 @@ const handleCreateFromTemplate = async () => {
       templateForm.templateId = ''
       selectedTemplate.value = null
     } else {
-      ElMessage.error('AI生成失败: ' + (aiResponse.data.error || '未知错误'))
+      // 处理API返回的错误
+      handleAIError(aiResponse.data)
     }
   } catch (error) {
     console.error('从模板创建失败:', error)
-    ElMessage.error('从模板创建失败: ' + (error.response?.data?.error || error.message))
+    
+    // 处理HTTP错误响应
+    if (error.response) {
+      handleAIError(error.response.data, error.response.status)
+    } else {
+      ElMessage.error('从模板创建失败: ' + (error.message || '未知错误'))
+    }
   } finally {
     aiGenerating.value = false
   }
