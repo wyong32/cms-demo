@@ -22,21 +22,12 @@ dotenv.config();
 // 创建Express应用
 const app = express();
 
-// 检查环境变量
-console.log('🔧 环境检查:');
-console.log('- NODE_ENV:', process.env.NODE_ENV);
-console.log('- DATABASE_URL:', process.env.DATABASE_URL ? '已设置' : '未设置');
-console.log('- JWT_SECRET:', process.env.JWT_SECRET ? '已设置' : '未设置');
-console.log('- PORT:', process.env.PORT || 3001);
-console.log('- CORS_ORIGIN:', process.env.CORS_ORIGIN || '默认配置');
-
 // 延迟创建 Prisma 客户端，避免启动时错误
 let prisma;
 try {
   prisma = new PrismaClient();
-  console.log('✅ Prisma 客户端创建成功');
 } catch (error) {
-  console.error('❌ Prisma 客户端创建失败:', error);
+  console.error('Prisma 客户端创建失败:', error);
   prisma = null;
 }
 
@@ -58,7 +49,6 @@ const corsOptions = {
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      console.log('🚫 CORS blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -130,16 +120,12 @@ app.use((error, req, res, next) => {
 
 // 启动服务器
 app.listen(PORT, () => {
-  console.log(`🚀 CMS API服务已启动在端口 ${PORT}`);
-  console.log(`💻 本地访问地址: http://localhost:${PORT}`);
-  console.log(`🔍 API测试地址: http://localhost:${PORT}/api/test`);
-  console.log(`🌍 环境: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🗄️ 数据库URL: ${process.env.DATABASE_URL ? '已配置' : '未配置'}`);
+  console.log(`CMS API服务已启动在端口 ${PORT}`);
+  console.log(`环境: ${process.env.NODE_ENV || 'development'}`);
 });
 
 // 优雅关闭
 process.on('SIGINT', async () => {
-  console.log('正在关闭服务器...');
   if (prisma) {
     await prisma.$disconnect();
   }
@@ -147,7 +133,6 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
-  console.log('正在关闭服务器...');
   if (prisma) {
     await prisma.$disconnect();
   }

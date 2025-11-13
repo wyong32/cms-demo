@@ -106,15 +106,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
     if (!template) {
       return res.status(404).json({ error: '数据模板不存在' });
     }
-    
-    // 调试信息：查看HTML内容情况
-    console.log('📊 模板详情查询:', {
-      id: template.id,
-      title: template.title,
-      hasDetilsHtml: !!template.detailsHtml,
-      detailsHtmlLength: template.detailsHtml?.length || 0,
-      detailsHtmlPreview: template.detailsHtml ? template.detailsHtml.substring(0, 200) + '...' : '无内容'
-    });
 
     res.json({ template });
   } catch (error) {
@@ -153,14 +144,6 @@ router.post('/', authenticateToken, requireUser, validateRequired(['title', 'cat
 
     // 处理标签数组
     const processedTags = Array.isArray(tags) ? tags.filter(tag => tag && tag.trim()) : [];
-    
-    // 调试信息：查看创建数据
-    console.log('📤 创建模板数据:', {
-      title: title?.trim(),
-      hasDetilsHtml: !!detailsHtml,
-      detailsHtmlLength: detailsHtml?.length || 0,
-      detailsHtmlPreview: detailsHtml ? detailsHtml.substring(0, 100) + '...' : '无内容'
-    });
 
     const template = await prisma.cMSDataTemplate.create({
       data: {
@@ -357,12 +340,40 @@ router.delete('/:id', authenticateToken, requireUser, async (req, res) => {
 // 批量获取模板（用于项目数据选择模板）
 router.get('/bulk/for-project', authenticateToken, async (req, res) => {
   try {
-    const { categoryId, search } = req.query;
+    const { categoryId, categoryIds, topCategoryId, search, page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
     let where = {};
     
+    // 支持单个分类ID
     if (categoryId) {
       where.categoryId = categoryId;
+    }
+    // 支持多个分类ID（用于一级分类筛选）
+    else if (categoryIds) {
+      const ids = categoryIds.split(',').filter(id => id.trim());
+      if (ids.length > 0) {
+        where.categoryId = { in: ids };
+      }
+    }
+    // 支持一级分类ID（获取该一级分类下所有二级分类的模板）
+    else if (topCategoryId) {
+      // 先获取该一级分类下的所有二级分类
+      const subCategories = await prisma.cMSCategory.findMany({
+        where: {
+          parentId: topCategoryId,
+          level: 2
+        },
+        select: { id: true }
+      });
+      
+      if (subCategories.length > 0) {
+        const subCategoryIds = subCategories.map(c => c.id);
+        where.categoryId = { in: subCategoryIds };
+      } else {
+        // 如果没有二级分类，返回空结果
+        where.categoryId = { in: [] };
+      }
     }
     
     if (search) {
@@ -372,30 +383,43 @@ router.get('/bulk/for-project', authenticateToken, async (req, res) => {
       ];
     }
 
-    const templates = await prisma.cMSDataTemplate.findMany({
-      where,
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        iframeUrl: true,
-        imageUrl: true,
-        categoryId: true,
-        category: {
-          select: {
-            id: true,
-            name: true,
-            type: true
-          }
+    const [templates, total] = await Promise.all([
+      prisma.cMSDataTemplate.findMany({
+        where,
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          iframeUrl: true,
+          imageUrl: true,
+          imageAlt: true,
+          categoryId: true,
+          category: {
+            select: {
+              id: true,
+              name: true,
+              type: true
+            }
+          },
+          tags: true,
+          createdAt: true
         },
-        tags: true,
-        createdAt: true
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 50 // 限制返回数量
-    });
+        skip,
+        take: parseInt(limit),
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.cMSDataTemplate.count({ where })
+    ]);
 
-    res.json({ templates });
+    res.json({ 
+      templates,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
   } catch (error) {
     console.error('获取模板列表失败:', error);
     res.status(500).json({ error: '获取模板列表失败' });

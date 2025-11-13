@@ -171,6 +171,7 @@
             top-placeholder="请选择一级分类"
             :show-count="true"
             @top-category-change="handleTopCategoryChange"
+            @change="handleCategoryChange"
           />
           <el-text type="info" size="small" class="filter-tip">
             选择分类可快速筛选相关模板
@@ -210,6 +211,20 @@
         </div>
 
         <el-empty v-if="!templatesLoading && !aiGenerating && templates.length === 0" description="暂无模板数据" />
+        
+        <!-- 模板分页 -->
+        <div v-if="templatePagination.total > 0" class="template-pagination">
+          <el-pagination
+            :current-page="templatePagination.page"
+            :page-size="templatePagination.limit"
+            :total="templatePagination.total"
+            :page-sizes="[12, 24, 48, 96]"
+            layout="total, sizes, prev, pager, next, jumper"
+            @size-change="handleTemplateSizeChange"
+            @current-change="handleTemplatePageChange"
+            :disabled="aiGenerating"
+          />
+        </div>
       </div>
 
       <template #footer>
@@ -259,7 +274,15 @@ const selectedTemplate = ref(null)
 // 分类相关状态
 const categories = ref([])
 const selectedCategoryId = ref('')
+const selectedTopCategoryId = ref('') // 当前选择的一级分类ID
 const categoriesLoading = ref(false)
+
+// 模板分页信息
+const templatePagination = reactive({
+  page: 1,
+  limit: 20,
+  total: 0
+})
 
 // 各种操作的loading状态
 const editingIds = ref(new Set()) // 正在编辑的数据ID
@@ -302,20 +325,14 @@ const formatDate = (date) => {
 // 获取项目信息
 const fetchProjectInfo = async () => {
   if (!projectId.value) {
-    console.error('❌ 项目ID不存在，无法获取项目信息')
     return
   }
   
   try {
     const response = await projectAPI.getProject(projectId.value)
     projectInfo.value = response.data.project
-    console.log('✅ 项目信息获取成功:', {
-      projectId: projectId.value,
-      projectName: projectInfo.value?.name,
-      routeProjectName: projectName.value
-    })
   } catch (error) {
-    console.error('❌ 获取项目信息失败:', error)
+    console.error('获取项目信息失败:', error)
   }
 }
 
@@ -323,7 +340,6 @@ const fetchProjectInfo = async () => {
 const fetchProjectData = async () => {
   // 检查项目ID是否存在
   if (!projectId.value) {
-    console.error('❌ 项目ID不存在，无法获取项目数据')
     ElMessage.error('项目ID缺失，请重新选择项目')
     return
   }
@@ -349,21 +365,11 @@ const fetchProjectData = async () => {
       params.isCompleted = searchForm.isCompleted
     }
     
-    console.log('📊 获取项目数据，参数:', params)
-    
     const response = await projectDataAPI.getProjectData(params)
     tableData.value = response.data.projectData || []
     pagination.total = response.data.pagination?.total || 0
-    
-    console.log('✅ 项目数据获取成功:', {
-      count: tableData.value.length,
-      total: pagination.total,
-      projectId: projectId.value,
-      projectName: projectName.value,
-      projectInfoName: projectInfo.value?.name
-    })
   } catch (error) {
-    console.error('❌ 获取项目数据失败:', error)
+    console.error('获取项目数据失败:', error)
     ElMessage.error('获取项目数据失败')
   } finally {
     loading.value = false
@@ -371,15 +377,32 @@ const fetchProjectData = async () => {
 }
 
 // 获取模板列表
-const fetchTemplates = async (categoryId = '') => {
+const fetchTemplates = async (categoryId = '', resetPage = false) => {
   templatesLoading.value = true
   try {
-    const params = {}
+    // 如果重置分页，则回到第一页
+    if (resetPage) {
+      templatePagination.page = 1
+    }
+    
+    const params = {
+      page: templatePagination.page,
+      limit: templatePagination.limit
+    }
+    
     if (categoryId) {
       params.categoryId = categoryId
     }
+    
     const response = await dataTemplateAPI.getTemplatesForProject(params)
     templates.value = response.data.templates || []
+    
+    // 更新分页信息
+    if (response.data.pagination) {
+      templatePagination.total = response.data.pagination.total || 0
+      templatePagination.page = response.data.pagination.page || 1
+      templatePagination.limit = response.data.pagination.limit || 20
+    }
   } catch (error) {
     console.error('获取模板列表失败:', error)
     ElMessage.error('获取模板列表失败')
@@ -439,22 +462,88 @@ const handleAdd = () => {
 const handleAddFromTemplate = () => {
   templateDialogVisible.value = true
   selectedCategoryId.value = '' // 重置分类选择
+  selectedTopCategoryId.value = '' // 重置一级分类选择
+  // 重置分页
+  templatePagination.page = 1
+  templatePagination.total = 0
   fetchCategories() // 获取分类列表
-  fetchTemplates() // 获取模板列表
+  fetchTemplates('', true) // 获取模板列表，重置分页
 }
 
 // 处理一级分类变化
 const handleTopCategoryChange = (topCategoryId) => {
-  // 一级分类变化时，重新加载模板
+  // 一级分类变化时，重新加载模板（重置分页）
+  selectedTopCategoryId.value = topCategoryId || ''
+  selectedCategoryId.value = '' // 清空二级分类选择
   if (topCategoryId) {
-    fetchTemplates()
+    // 使用一级分类ID来筛选模板
+    fetchTemplatesByTopCategory(topCategoryId, true)
+  } else {
+    // 如果清空一级分类，显示所有模板
+    fetchTemplates('', true)
+  }
+}
+
+// 根据一级分类获取模板
+const fetchTemplatesByTopCategory = async (topCategoryId, resetPage = false) => {
+  templatesLoading.value = true
+  try {
+    // 如果重置分页，则回到第一页
+    if (resetPage) {
+      templatePagination.page = 1
+    }
+    
+    const params = {
+      page: templatePagination.page,
+      limit: templatePagination.limit,
+      topCategoryId: topCategoryId
+    }
+    
+    const response = await dataTemplateAPI.getTemplatesForProject(params)
+    templates.value = response.data.templates || []
+    
+    // 更新分页信息
+    if (response.data.pagination) {
+      templatePagination.total = response.data.pagination.total || 0
+      templatePagination.page = response.data.pagination.page || 1
+      templatePagination.limit = response.data.pagination.limit || 20
+    }
+  } catch (error) {
+    console.error('获取模板列表失败:', error)
+    ElMessage.error('获取模板列表失败')
+  } finally {
+    templatesLoading.value = false
   }
 }
 
 // 处理分类筛选变化
 const handleCategoryChange = (categoryId) => {
   selectedCategoryId.value = categoryId
-  fetchTemplates(categoryId)
+  selectedTopCategoryId.value = '' // 选择二级分类时，清空一级分类选择
+  fetchTemplates(categoryId, true) // 重置分页
+}
+
+// 处理模板分页变化
+const handleTemplatePageChange = (page) => {
+  templatePagination.page = page
+  // 根据当前筛选模式调用相应的函数
+  if (selectedTopCategoryId.value) {
+    fetchTemplatesByTopCategory(selectedTopCategoryId.value)
+  } else {
+    fetchTemplates(selectedCategoryId.value)
+  }
+}
+
+// 处理模板页大小变化
+const handleTemplateSizeChange = (size) => {
+  templatePagination.limit = size
+  templatePagination.page = 1
+  // 根据当前筛选模式调用相应的函数
+  if (selectedTopCategoryId.value) {
+    fetchTemplatesByTopCategory(selectedTopCategoryId.value)
+  } else {
+    fetchTemplates(selectedCategoryId.value)
+  }
 }
 
 // 处理编辑
@@ -659,10 +748,6 @@ const handleCreateFromTemplate = async () => {
   try {
     aiGenerating.value = true
 
-    // 调试信息
-    console.log('🔍 选中的模板数据:', selectedTemplate.value)
-    console.log('🔍 iframeUrl值:', selectedTemplate.value?.iframeUrl)
-
     // 验证模板数据
     if (!selectedTemplate.value?.iframeUrl) {
       ElMessage.error('选中的模板缺少iframe链接，无法创建项目数据')
@@ -805,12 +890,6 @@ watch(
   ([newProjectId, newProjectName], [oldProjectId, oldProjectName]) => {
     // 如果项目ID或项目名称发生变化，重新获取数据
     if (newProjectId !== oldProjectId || newProjectName !== oldProjectName) {
-      console.log('🔄 路由参数变化，重新获取项目数据:', {
-        projectId: newProjectId,
-        projectName: newProjectName,
-        oldProjectId,
-        oldProjectName
-      })
       // 重置项目信息，强制重新获取
       projectInfo.value = null
       fetchProjectData()
@@ -934,8 +1013,16 @@ watch(
 
 /* 模板选择网格样式 */
 .template-selector {
-  max-height: 500px;
+  max-height: 600px;
   overflow-y: auto;
+}
+
+.template-pagination {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e4e7ed;
+  display: flex;
+  justify-content: center;
 }
 
 .template-grid {

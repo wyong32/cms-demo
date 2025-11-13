@@ -430,7 +430,6 @@ const getImageUrl = (url) => {
 
 // 处理分类选择变化
 const handleCategoryChange = () => {
-  console.log('分类选择变化:', searchForm.categoryId)
   pagination.page = 1 // 重置到第一页
   fetchDataTemplates()
 }

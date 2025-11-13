@@ -571,24 +571,18 @@ const getTextareaRows = (fieldName) => {
 const getImageUrl = (url) => {
   if (!url) return ''
   
-  console.log('🖼️ 处理图片URL:', url)
-  
   // 如果是完整URL（http或https开头），直接返回
   if (url.startsWith('http://') || url.startsWith('https://')) {
-    console.log('✅ 使用完整URL:', url)
     return url
   }
   
   // 如果是相对路径（以/api/开头），由于前端代理配置，直接返回
   if (url.startsWith('/api/')) {
-    console.log('✅ 使用API路径:', url)
     return url
   }
   
   // 其他情况，假设是文件名，添加前缀
-  const finalUrl = `/api/uploads/${url}`
-  console.log('✅ 使用上传路径:', finalUrl)
-  return finalUrl
+  return `/api/uploads/${url}`
 }
 
 const beforeUpload = (file) => {
@@ -607,14 +601,10 @@ const beforeUpload = (file) => {
 }
 
 const handleUploadSuccess = (response, fieldName) => {
-  console.log('📤 上传响应:', response)
-  
   if (response.success) {
     form.data[fieldName] = response.data.imageUrl || response.data.filename
-    console.log('✅ 设置图片URL:', form.data[fieldName])
     ElMessage.success('图片上传成功')
   } else {
-    console.error('❌ 上传失败:', response.error)
     ElMessage.error('图片上传失败')
   }
 }
@@ -649,15 +639,9 @@ const fetchCategories = async () => {
 // 获取项目信息
 const fetchProject = async () => {
   try {
-    if (import.meta.env.DEV) {
-      console.log('开始获取项目信息，projectId:', projectId.value)
-    }
     const response = await projectAPI.getProject(projectId.value)
     const project = response.data.project
     projectFields.value = project.fields || []
-    if (import.meta.env.DEV) {
-      console.log('项目字段:', projectFields.value)
-    }
     
     // 只在非编辑模式下初始化表单数据
     if (!isEdit.value) {
@@ -676,18 +660,10 @@ const fetchProject = async () => {
       // 恢复richTextImages
       if (existingRichTextImages.length > 0) {
         form.data.richTextImages = existingRichTextImages
-        console.log('🔧 在fetchProject中恢复richTextImages:', existingRichTextImages)
-      }
-      
-      if (import.meta.env.DEV) {
-        console.log('初始化后的表单数据:', form.data)
       }
       
       // 如果是从模板创建，预填充模板数据
       if (templateId.value) {
-        if (import.meta.env.DEV) {
-          console.log('检测到模板ID，开始获取模板数据')
-        }
         await fetchTemplateData()
       }
     }
@@ -700,14 +676,8 @@ const fetchProject = async () => {
 // 获取模板数据
 const fetchTemplateData = async () => {
   try {
-    if (import.meta.env.DEV) {
-      console.log('开始获取模板数据，templateId:', templateId.value)
-    }
     const response = await templateAPI.getTemplate(templateId.value)
     const template = response.data.template
-    if (import.meta.env.DEV) {
-      console.log('获取到的模板数据:', template)
-    }
     
     // 直接映射模板的字段到项目数据字段
     const templateToProjectMapping = {
@@ -731,16 +701,10 @@ const fetchTemplateData = async () => {
       const templateValue = template[templateKey]
       
       if (templateValue !== undefined && templateValue !== null) {
-        if (import.meta.env.DEV) {
-          console.log(`设置字段 ${projectKey} = ${templateValue}`)
-        }
         form.data[projectKey] = templateValue
       }
     })
     
-    if (import.meta.env.DEV) {
-      console.log('预填充后的表单数据:', form.data)
-    }
     ElMessage.success('模板数据预填充成功')
     
   } catch (error) {
@@ -784,17 +748,6 @@ const fetchProjectData = async (id) => {
         ...(form.data.richTextImages || []),
         ...existingRichTextImages
       ]
-    }
-    
-    if (import.meta.env.DEV) {
-      console.log('🔍 加载的项目数据详情:', {
-        id: projectData.id,
-        categoryId: projectData.categoryId,
-        category: projectData.category,
-        data: projectData.data
-      })
-      console.log('🔍 设置分类ID:', projectData.categoryId || '')
-      console.log('🔍 填充后的表单数据:', form.data)
     }
     
     // 清除表单验证，避免显示红字
@@ -926,9 +879,6 @@ const handleReset = () => {
   if (isEdit.value) {
     fetchProjectData(route.params.id)
   } else {
-    if (import.meta.env.DEV) {
-      console.log('重置表单，当前模板ID:', templateId.value)
-    }
     projectFields.value.forEach(field => {
       if (field.fieldType === 'ARRAY') {
         form.data[field.fieldName] = []
@@ -939,9 +889,6 @@ const handleReset = () => {
     
     // 如果是从模板创建，重新加载模板数据
     if (templateId.value) {
-      if (import.meta.env.DEV) {
-        console.log('重新加载模板数据')
-      }
       fetchTemplateData()
     }
   }
@@ -999,17 +946,6 @@ const handleRichTextImageInserted = (imageInfo) => {
 onMounted(async () => {
   try {
     loading.value = true
-    
-    
-    if (import.meta.env.DEV) {
-      console.log('页面加载，路由参数:', {
-        projectId: projectId.value,
-        templateId: templateId.value,
-        isEdit: isEdit.value,
-        routeParams: route.params,
-        routeQuery: route.query
-      })
-    }
     
     await fetchProject()
     await fetchCategories()

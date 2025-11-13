@@ -50,8 +50,6 @@ router.post('/image', authenticateToken, upload.single('image'), async (req, res
       // 如果Cloudinary上传失败，使用占位符图片
       const fallbackUrl = `https://via.placeholder.com/400x300/409eff/ffffff?text=${encodeURIComponent(req.file.originalname)}`;
       
-      console.log('Cloudinary上传失败，使用占位符图片:', uploadResult.error);
-      
       return res.json({
         success: true,
         data: {
@@ -65,14 +63,6 @@ router.post('/image', authenticateToken, upload.single('image'), async (req, res
     }
 
     const { data } = uploadResult;
-    
-    console.log('图片上传成功:', {
-      publicId: data.publicId,
-      originalName: data.originalName,
-      size: data.size,
-      format: data.format,
-      url: data.secureUrl
-    });
     
     res.json({
       success: true,
@@ -139,8 +129,6 @@ router.delete('/image/:publicId', authenticateToken, async (req, res) => {
   try {
     const { publicId } = req.params;
     
-    console.log('删除图片请求:', publicId);
-    
     // 使用图片处理器删除
     const deleteResult = await deleteImage(publicId);
     
@@ -151,7 +139,6 @@ router.delete('/image/:publicId', authenticateToken, async (req, res) => {
       });
     } else {
       // 即使删除失败也返回成功，因为可能是占位符图片
-      console.log('删除图片失败，可能是占位符图片:', deleteResult.error);
       res.json({
         success: true,
         message: '图片删除成功'

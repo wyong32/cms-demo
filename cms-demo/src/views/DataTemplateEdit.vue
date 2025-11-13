@@ -276,13 +276,6 @@ const fetchDataTemplate = async (id) => {
     const response = await dataTemplateAPI.getTemplate(id)
     const template = response.data.template
     
-    console.log('📊 模板详情加载:', {
-      id: template.id,
-      title: template.title,
-      hasDetilsHtml: !!template.detailsHtml,
-      detailsHtmlLength: template.detailsHtml?.length || 0
-    })
-    
     // 获取分类信息以设置一级分类
     const category = categories.value.find(cat => cat.id === template.categoryId)
     const topCategoryId = category?.parentId || ''
@@ -300,8 +293,6 @@ const fetchDataTemplate = async (id) => {
       iframeUrl: template.iframeUrl || '',
       imageUrl: template.imageUrl || ''
     })
-    
-    console.log('✅ 表单数据加载完成')
   } catch (error) {
     console.error('获取数据模板失败:', error)
     ElMessage.error('获取数据模板失败')
@@ -326,14 +317,10 @@ const beforeUpload = (file) => {
 
 // 上传成功
 const handleUploadSuccess = (response) => {
-  console.log('📤 上传响应:', response)
-  
   if (response.success) {
     form.imageUrl = response.data.imageUrl
-    console.log('✅ 设置图片URL:', form.imageUrl)
     ElMessage.success('图片上传成功')
   } else {
-    console.error('❌ 上传失败:', response.error)
     ElMessage.error(response.error || '上传失败')
   }
 }
@@ -359,24 +346,18 @@ const handlePreviewIframe = () => {
 const getImageUrl = (url) => {
   if (!url) return ''
   
-  console.log('🖼️ 处理图片URL:', url)
-  
   // 如果是完整URL（http或https开头），直接返回
   if (url.startsWith('http://') || url.startsWith('https://')) {
-    console.log('✅ 使用完整URL:', url)
     return url
   }
   
   // 如果是相对路径（以/api/开头），由于前端代理配置，直接返回
   if (url.startsWith('/api/')) {
-    console.log('✅ 使用API路径:', url)
     return url
   }
   
   // 其他情况，假设是文件名，添加前缀
-  const finalUrl = `/api/uploads/${url}`
-  console.log('✅ 使用上传路径:', finalUrl)
-  return finalUrl
+  return `/api/uploads/${url}`
 }
 
 // 保存

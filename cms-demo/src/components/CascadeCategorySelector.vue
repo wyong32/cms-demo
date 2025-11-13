@@ -126,12 +126,9 @@ const handleTopCategoryChange = (topId) => {
   if (topId) {
     // 筛选该一级分类下的二级分类
     filteredCategories.value = allCategories.value.filter(c => c.parentId === topId)
-    console.log('🔍 一级分类ID:', topId)
-    console.log('📋 筛选出的二级分类:', filteredCategories.value.map(c => c.name))
     
     // 选择一级分类时，将一级分类ID作为值（允许只选一级分类）
     emit('update:modelValue', topId)
-    console.log('✅ 选择了一级分类，ID:', topId)
   } else {
     filteredCategories.value = []
     emit('update:modelValue', '')
@@ -142,11 +139,8 @@ const handleTopCategoryChange = (topId) => {
 
 // 处理二级分类变化
 const handleChange = (value) => {
-  console.log('✅ 选择了二级分类:', value)
   // 查找选中的分类信息
   const selectedCategory = filteredCategories.value.find(c => c.id === value)
-  console.log('📋 选中的分类信息:', selectedCategory)
-  
   emit('change', value, selectedCategory)
 }
 
@@ -156,7 +150,6 @@ const fetchTopCategories = async () => {
   try {
     const response = await categoriesAPI.getCategories({ level: 1 })
     topCategories.value = response?.data?.categories || response?.categories || []
-    console.log('✅ 一级分类加载完成:', topCategories.value.map(c => c.name))
   } catch (error) {
     console.error('获取一级分类失败:', error)
     ElMessage.error('获取分类失败')
@@ -170,8 +163,6 @@ const fetchAllCategories = async () => {
   try {
     const response = await categoriesAPI.getCategories({ level: 2 })
     allCategories.value = response?.data?.categories || response?.categories || []
-    console.log('✅ 二级分类加载完成，共', allCategories.value.length, '个')
-    console.log('📋 二级分类列表:', allCategories.value.map(c => ({ name: c.name, parentId: c.parentId })))
   } catch (error) {
     console.error('获取二级分类失败:', error)
   }

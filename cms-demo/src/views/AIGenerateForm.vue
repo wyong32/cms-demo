@@ -390,12 +390,8 @@ const fetchProjectInfo = async (projectId) => {
   try {
     const response = await projectAPI.getProject(projectId)
     projectInfo.value = response.data.project
-    console.log('✅ 获取项目信息成功:', {
-      projectId,
-      projectName: projectInfo.value?.name
-    })
   } catch (error) {
-    console.error('❌ 获取项目信息失败:', error)
+    console.error('获取项目信息失败:', error)
   }
 }
 
@@ -415,14 +411,8 @@ const fetchProjectFields = async (projectId) => {
         form.customFields[field.fieldName] = ''
       }
     })
-    
-    console.log('✅ 获取项目字段成功:', {
-      totalFields: projectFields.value.length,
-      customFieldsCount: customFields.value.length,
-      customFieldNames: customFields.value.map(f => f.fieldName)
-    })
   } catch (error) {
-    console.error('❌ 获取项目字段失败:', error)
+    console.error('获取项目字段失败:', error)
   }
 }
 
@@ -441,14 +431,9 @@ const fetchTemplateDataForPrefill = async (templateId) => {
     form.iframeUrl = template.iframeUrl || ''
     form.categoryId = template.categoryId || ''
     
-    console.log('✅ 已从模板预填充数据:', {
-      title: form.title,
-      categoryId: form.categoryId
-    })
-    
     ElMessage.success('已从模板预填充基础信息，请补充自定义字段')
   } catch (error) {
-    console.error('❌ 获取模板数据失败:', error)
+    console.error('获取模板数据失败:', error)
     ElMessage.error('获取模板数据失败')
   }
 }
@@ -597,8 +582,6 @@ const handleGenerate = async () => {
       })
     }
     
-    console.log('🚀 开始AI生成，数据:', generateData)
-    
     // 调用AI生成API
     const response = await aiAPI.generate(generateData)
     
@@ -695,15 +678,12 @@ onMounted(async () => {
   // 检查路由查询参数，自动设置项目ID（如果从项目页面进入）
   if (generateType.value === 'project' && route.query.projectId) {
     form.projectId = route.query.projectId
-    console.log('🎯 自动设置项目ID:', route.query.projectId, '项目名称:', route.query.projectName)
-    
     // 获取项目详细信息和字段配置
     await fetchProjectInfo(route.query.projectId)
     await fetchProjectFields(route.query.projectId)
     
     // 检测是否来自模板创建（有自定义字段的情况）
     if (route.query.fromTemplate === 'true' && route.query.templateId) {
-      console.log('🔄 检测到来自模板创建，模板ID:', route.query.templateId)
       await fetchTemplateDataForPrefill(route.query.templateId)
     }
   }

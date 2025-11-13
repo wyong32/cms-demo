@@ -364,19 +364,12 @@ const handleInsertImage = async () => {
 // 初始化Quill编辑器
 const initQuill = async () => {
   if (!quillContainer.value || viewMode.value !== 'editor') {
-    console.log('⚠️ 跳过Quill初始化:', { 
-      hasContainer: !!quillContainer.value, 
-      mode: viewMode.value 
-    })
     return
   }
-  
-  console.log('🚀 开始初始化Quill编辑器')
   
   try {
     // 由于v-if确保了DOM是全新的，直接创建实例
     quillInstance = new Quill(quillContainer.value, quillOptions)
-    console.log('✅ Quill实例创建成功')
     
     // 自定义图片处理器
     const toolbar = quillInstance.getModule('toolbar')
@@ -386,12 +379,9 @@ const initQuill = async () => {
     
     // 设置初始内容
     if (htmlContent.value) {
-      console.log('📝 设置初始内容:', htmlContent.value.length, '字符')
       try {
         quillInstance.clipboard.dangerouslyPasteHTML(htmlContent.value)
-        console.log('✅ 内容设置成功')
       } catch (pasteError) {
-        console.warn('⚠️ 使用备用方法设置内容:', pasteError.message)
         quillInstance.root.innerHTML = htmlContent.value
       }
     }
@@ -416,21 +406,16 @@ const initQuill = async () => {
       }
     }, { immediate: true })
     
-    console.log('✅ Quill编辑器初始化完成')
-    
   } catch (error) {
-    console.error('❌ Quill初始化失败:', error)
+    console.error('Quill初始化失败:', error)
   }
 }
 
 // 切换编辑模式函数 - 提前定义确保可用性
 const switchMode = (mode) => {
-  console.log('🔄 切换编辑模式:', { from: viewMode.value, to: mode })
-  
   // 在模式切换前保存内容
   if (viewMode.value === 'editor' && quillInstance) {
     htmlContent.value = quillInstance.root.innerHTML
-    console.log('📝 保存编辑器内容:', htmlContent.value.length)
   } else if (viewMode.value === 'text') {
     // 将纯文本转换为HTML格式
     const htmlValue = textContent.value.split('\n').map(line => `<p>${line || '<br>'}</p>`).join('')
@@ -439,7 +424,6 @@ const switchMode = (mode) => {
   
   // 清理旧实例（由v-if自动处理DOM销毁）
   if (quillInstance) {
-    console.log('🗑️ 清理Quill实例')
     quillInstance = null
   }
   
@@ -449,7 +433,6 @@ const switchMode = (mode) => {
   // 如果切换到编辑器模式，在DOM创建后初始化
   if (mode === 'editor') {
     nextTick(() => {
-      console.log('⏰ DOM重建完成，初始化Quill编辑器')
       initQuill()
     })
   } else if (mode === 'text') {
@@ -683,34 +666,15 @@ const handleTextChange = (value) => {
     try {
       quillInstance.root.innerHTML = htmlValue
     } catch (error) {
-      console.warn('同步文本内容到编辑器失败:', error)
+      // 同步失败，忽略
     }
   }
 }
 
 // 监听外部值变化
 watch(() => props.modelValue, (newValue) => {
-  console.log('🔄 富文本编辑器接收到外部值变化:', {
-    hasValue: !!newValue,
-    valueLength: newValue?.length || 0,
-    valuePreview: newValue ? newValue.substring(0, 100) + '...' : '无内容',
-    currentMode: viewMode.value,
-    isComplexHtml: newValue && newValue.includes('style=') && newValue.length > 500,
-    isDifferent: newValue !== htmlContent.value,
-    isUserEditing: isUserEditing.value
-  })
-  
   if (newValue !== htmlContent.value) {
     htmlContent.value = newValue || ''
-    
-    // 只在非用户编辑状态下才考虑自动切换模式
-    // 这样可以避免用户在可视化模式编辑时被强制切换到HTML模式
-    if (!isUserEditing.value && newValue && newValue.includes('style=') && newValue.length > 500 && viewMode.value === 'editor') {
-      console.log('🔄 检测到复杂HTML内容（外部设置），建议切换到HTML模式')
-      // 不自动切换，而是给用户提示（可选）
-      // viewMode.value = 'html'
-      // return
-    }
     
     // 关键修复：只有在非用户编辑状态下才更新Quill编辑器内容
     // 这样可以避免用户输入时光标跳到开始位置
@@ -728,14 +692,12 @@ watch(() => props.modelValue, (newValue) => {
             try {
               quillInstance.setSelection(selection)
             } catch (error) {
-              console.warn('恢复光标位置失败:', error)
+              // 恢复光标位置失败，忽略
             }
           }, 10)
         }
-        
-        console.log('✅ 富文本编辑器已更新内容（外部触发）')
       } catch (error) {
-        console.warn('同步外部内容到编辑器失败:', error)
+        // 同步外部内容到编辑器失败，忽略
       }
     }
   }
@@ -751,7 +713,6 @@ onMounted(async () => {
 // 组件卸载时清理
 onUnmounted(() => {
   if (quillInstance) {
-    console.log('🗑️ 组件卸载，清理Quill实例')
     quillInstance = null
   }
   // 清空容器

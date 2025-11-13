@@ -252,8 +252,6 @@ router.post('/', authenticateToken, requireUser, validateRequired(['projectId', 
     // 如果有分类信息且用户勾选了"保存为模板"，则创建数据模板
     if (saveAsTemplate && categoryId && cleanedData.title) {
       try {
-        console.log('🔄 用户选择保存为模板，开始创建数据模板...');
-        
         // 检查模板标题是否重复
         const existingTemplate = await prisma.cMSDataTemplate.findFirst({
           where: {
@@ -267,18 +265,16 @@ router.post('/', authenticateToken, requireUser, validateRequired(['projectId', 
         if (!existingTemplate) {
           const newTemplate = await prisma.cMSDataTemplate.create({
             data: {
-              title: cleanedData.title, // 使用用户原始标题
-              categoryId, // 使用用户选择的分类
-              description: cleanedData.description || null, // 使用用户填写的原始描述
-              imageUrl: cleanedData.imageUrl || null, // 使用用户上传的图片
-              iframeUrl: cleanedData.iframeUrl || null, // 使用用户提供的iframe链接
-              tags: [], // 模板不使用用户填写的标签，保持空数组供AI生成
+              title: cleanedData.title,
+              categoryId,
+              description: cleanedData.description || null,
+              imageUrl: cleanedData.imageUrl || null,
+              iframeUrl: cleanedData.iframeUrl || null,
+              tags: [],
               publishDate: new Date(),
               createdBy: req.user.id
             }
           });
-          
-          console.log('✅ 数据模板创建成功:', newTemplate.id);
           
           // 记录模板创建日志
           await prisma.cMSOperationLog.create({
@@ -290,11 +286,9 @@ router.post('/', authenticateToken, requireUser, validateRequired(['projectId', 
               description: `自动创建数据模板: ${cleanedData.title}`
             }
           });
-        } else {
-          console.log('⚠️ 模板标题已存在，跳过模板创建');
         }
       } catch (templateError) {
-        console.error('❌ 自动创建模板失败:', templateError);
+        console.error('自动创建模板失败:', templateError);
         // 不影响主流程，只记录错误
       }
     }

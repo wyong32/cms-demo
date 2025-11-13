@@ -78,45 +78,35 @@ class AIService {
         // this.client = new OpenAI({
         //   apiKey: process.env.OPENAI_API_KEY
         // });
-        console.log('🤖 AI服务: OpenAI提供商已选择（当前使用模拟数据）');
         break;
       case 'claude':
         // this.client = new Anthropic({
         //   apiKey: process.env.ANTHROPIC_API_KEY
         // });
-        console.log('🤖 AI服务: Claude提供商已选择（当前使用模拟数据）');
         break;
       case 'gemini':
         try {
           this.client = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-          console.log('🤖 AI服务: Gemini提供商初始化成功，API密钥已配置');
         } catch (error) {
-          console.log('🎭 AI服务: Gemini初始化失败，回退到模拟模式');
-          console.log('💡 失败原因:', error.message);
+          // Gemini初始化失败，回退到模拟模式
         }
         break;
       default:
-        console.log('🎭 AI服务: 使用模拟环境 - 所有内容将被模拟生成');
-        console.log('💡 启用真实AI: 请在.env文件中设置AI_PROVIDER并安装对应SDK');
+        // 使用模拟环境
+        break;
     }
   }
 
   // 主要的AI生成方法
   async generateContent({ title, description, imageUrl, iframeUrl, options = [], categoryInfo = null }) {
-    console.log(`🚀 AI Generation Started - Provider: ${this.provider.toUpperCase()}`);
-
     switch (this.provider) {
       case 'openai':
-        console.log('🎭 ROUTING to OpenAI (will use mock data)');
         return this.generateWithOpenAI({ title, description, imageUrl, iframeUrl, options, categoryInfo });
       case 'claude':
-        console.log('🎭 ROUTING to Claude (will use mock data)');
         return this.generateWithClaude({ title, description, imageUrl, iframeUrl, options, categoryInfo });
       case 'gemini':
-        console.log('🤖 ROUTING to Gemini API');
         return this.generateWithGemini({ title, description, imageUrl, iframeUrl, options, categoryInfo });
       default:
-        console.log('🎭 ROUTING to MOCK mode - simulated content');
         return this.generateMockContent({ title, description, imageUrl, iframeUrl, options, categoryInfo });
     }
   }
@@ -143,7 +133,6 @@ class AIService {
       // return this.formatAIResponse(result);
 
       // 暂时返回模拟数据
-      console.log('OpenAI提示词:', { systemPrompt, userPrompt });
       return this.generateMockContent({ title, description, imageUrl, iframeUrl, options });
     } catch (error) {
       console.error('OpenAI API调用失败:', error);
@@ -165,7 +154,6 @@ class AIService {
       // const result = JSON.parse(message.content[0].text);
       // return this.formatAIResponse(result);
 
-      console.log('Claude提示词:', prompt);
       return this.generateMockContent({ title, description, imageUrl, iframeUrl, options });
     } catch (error) {
       console.error('Claude API调用失败:', error);
@@ -176,15 +164,7 @@ class AIService {
   // Gemini实现
   async generateWithGemini({ title, description, imageUrl, iframeUrl, options, categoryInfo }) {
     try {
-      console.log('🔍 Gemini服务诊断:');
-      console.log('   - Provider:', this.provider);
-      console.log('   - Client exists:', !!this.client);
-      console.log('   - API Key exists:', !!process.env.GOOGLE_API_KEY);
-      console.log('   - API Key prefix:', process.env.GOOGLE_API_KEY ? process.env.GOOGLE_API_KEY.substring(0, 10) + '...' : 'N/A');
-
       if (!this.client) {
-        console.log('❌ 关键问题: Gemini客户端未初始化，使用模拟数据');
-        console.log('💡 解决方案: 检查环境变量AI_PROVIDER和GOOGLE_API_KEY是否正确设置');
         return this.generateMockContent({ title, description, imageUrl, iframeUrl, options, categoryInfo });
       }
 
@@ -192,14 +172,9 @@ class AIService {
       const model = this.client.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
       const prompt = this.buildGeminiPrompt({ title, description, imageUrl, iframeUrl, options, categoryInfo });
 
-      console.log('🤖 真实AI: 正在调用Gemini API...');
-      console.log('📝 生成选项:', options);
-
       const result = await model.generateContent(prompt);
       const response = await result.response;
       const text = response.text();
-
-      console.log('✅ 成功: 收到Gemini API响应');
 
       // 尝试解析JSON响应
       try {
@@ -219,43 +194,13 @@ class AIService {
         }
 
         const content = JSON.parse(jsonText);
-        console.log('✅ 成功: Gemini响应解析为JSON格式');
-        console.log('📊 生成的字段:', {
-          title: !!content.title,
-          description: !!content.description,
-          detailsHtml: !!content.detailsHtml,
-          detailsHtmlLength: content.detailsHtml?.length || 0
-        });
         return this.formatAIResponse(content);
       } catch (parseError) {
         // 如果解析失败，返回基本内容
-        console.warn('⚠️  警告: Gemini响应不是有效JSON格式，使用备用处理方式');
-        console.log('原始响应前200字符:', text.substring(0, 200) + '...');
         return this.createFallbackResponse({ title, description, imageUrl, options, aiText: text });
       }
     } catch (error) {
-      console.error('❌ 错误: Gemini API调用失败:', error.message);
-      console.error('❌ 错误详情:', error);
-      console.log('🔍 错误类型分析:');
-
-      if (error.message.includes('API_KEY_INVALID')) {
-        console.log('   - 问题: API密钥无效');
-        console.log('   - 解决方案: 检查GOOGLE_API_KEY是否正确');
-      } else if (error.message.includes('PERMISSION_DENIED')) {
-        console.log('   - 问题: API权限被拒绝');
-        console.log('   - 解决方案: 检查API密钥权限设置');
-      } else if (error.message.includes('QUOTA_EXCEEDED')) {
-        console.log('   - 问题: API配额已用完');
-        console.log('   - 解决方案: 检查API使用限制或升级账户');
-      } else if (error.message.includes('models/gemini-1.5-flash')) {
-        console.log('   - 问题: 模型不可用');
-        console.log('   - 解决方案: 尝试使用其他模型如gemini-pro');
-      } else {
-        console.log('   - 问题: 未知错误');
-        console.log('   - 建议: 检查网络连接和API服务状态');
-      }
-
-      console.log('🎭 备用方案: 切换到模拟模式处理此次请求');
+      console.error('Gemini API调用失败:', error);
       // 如果API调用失败，返回模拟数据
       return this.generateMockContent({ title, description, imageUrl, iframeUrl, options });
     }
@@ -506,11 +451,7 @@ ${this._buildPromptOutputFormat(title)}
 
     // 确保HTML内容总是生成（详细内容，用于HTML内容区域）
     if (options.autoContent) {
-      console.log('📄 开始生成HTML详细内容（备用模式）...');
       baseData.detailsHtml = this.generateDetailContent(optimizedTitle, description, shortDescription, null);
-      console.log('✅ HTML内容生成成功，长度:', baseData.detailsHtml?.length || 0);
-    } else {
-      console.log('⚠️  警告: autoContent选项未选中，跳过HTML内容生成（备用模式）');
     }
 
     // 确保地址栏总是生成
@@ -524,8 +465,6 @@ ${this._buildPromptOutputFormat(title)}
 
   // 模拟AI生成（用于测试和演示）
   generateMockContent({ title, description, imageUrl, iframeUrl, options, categoryInfo }) {
-    console.log('🎭 模拟模式: 正在生成AI模拟内容');
-    console.log('📝 输入参数:', { title, description: description.substring(0, 50) + '...', options, categoryInfo });
 
     // 处理options格式：支持数组和对象两种格式
     const optionsObj = {};
@@ -560,11 +499,7 @@ ${this._buildPromptOutputFormat(title)}
 
     // 确保HTML内容总是生成（详细内容，用于HTML内容区域）
     if (optionsObj.autoContent) {
-      console.log('📄 开始生成HTML详细内容...');
       baseData.detailsHtml = this.generateDetailContent(optimizedTitle, description, shortDescription, categoryInfo);
-      console.log('✅ HTML内容生成成功，长度:', baseData.detailsHtml?.length || 0);
-    } else {
-      console.log('⚠️  警告: autoContent选项未选中，跳过HTML内容生成');
     }
 
     // 确保地址栏总是生成
@@ -572,22 +507,10 @@ ${this._buildPromptOutputFormat(title)}
       baseData.addressBar = this.generateAddressBar(optimizedTitle);
     }
 
-    console.log('✅ 模拟结果: 生成字段:', {
-      title: baseData.title,
-      descriptionLength: baseData.description?.length || 0,
-      hasSEO: !!baseData.seoTitle,
-      hasHTML: !!baseData.detailsHtml,
-      htmlLength: baseData.detailsHtml?.length || 0,
-      hasAddressBar: !!baseData.addressBar,
-      tagCount: baseData.tags.length
-    });
-
     // 最终验证：确保HTML内容存在
     if (optionsObj.autoContent && !baseData.detailsHtml) {
-      console.error('❌ 严重错误: autoContent选项已选中但HTML内容为空！');
       // 强制生成基础HTML内容
       baseData.detailsHtml = `<div style="font-family: Arial, sans-serif; padding: 20px;"><h2>${baseData.title}</h2><p>${baseData.description}</p><p>基础内容已生成。</p></div>`;
-      console.log('🔧 紧急修复: 已生成基础HTML内容，长度:', baseData.detailsHtml.length);
     }
 
     return baseData;

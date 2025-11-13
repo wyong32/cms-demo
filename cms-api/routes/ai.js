@@ -57,7 +57,6 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
     }
 
     // 调用AI服务生成内容
-    console.log('🤖 AI服务调用开始，选项:', options);
     const aiGeneratedData = await aiService.generateContent({
       title,
       description,
@@ -65,17 +64,6 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
       iframeUrl,
       options,
       categoryInfo
-    });
-    console.log('✅ AI服务返回数据:', {
-      title: aiGeneratedData.title,
-      descriptionLength: aiGeneratedData.description?.length || 0,
-      hasDetilsHtml: !!aiGeneratedData.detailsHtml,
-      detailsHtmlLength: aiGeneratedData.detailsHtml?.length || 0,
-      tags: aiGeneratedData.tags?.length || 0,
-      hasSeoTitle: !!aiGeneratedData.seoTitle,
-      hasSeoDescription: !!aiGeneratedData.seoDescription,
-      hasSeoKeywords: !!aiGeneratedData.seoKeywords,
-      hasAddressBar: !!aiGeneratedData.addressBar
     });
 
     let createdItem;
@@ -146,14 +134,6 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
         return res.status(400).json({ error: '指定的项目不存在' });
       }
 
-      // 创建项目数据
-      console.log('💾 准备保存项目数据，包含字段:', {
-        title: aiGeneratedData.title,
-        description: aiGeneratedData.description,
-        detailsHtml: aiGeneratedData.detailsHtml ? '已生成' : '未生成',
-        detailsHtmlLength: aiGeneratedData.detailsHtml?.length || 0
-      });
-      
       // 合并AI生成的数据和自定义字段
       const projectDataFields = {
         title: aiGeneratedData.title,
@@ -170,11 +150,6 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
         tags: aiGeneratedData.tags,
         ...customFields // 合并自定义字段
       };
-      
-      console.log('💾 保存项目数据，包含自定义字段:', {
-        aiGeneratedFields: Object.keys(projectDataFields).filter(k => !Object.keys(customFields).includes(k)),
-        customFields: Object.keys(customFields)
-      });
       
       createdItem = await prisma.cMSProjectData.create({
         data: {
@@ -221,13 +196,11 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
       // 如果有分类信息且用户勾选了"保存为模板"，则创建数据模板
       if (saveAsTemplate && categoryId) {
         try {
-          console.log('🔄 用户选择保存为模板，开始创建数据模板...');
-          
           // 检查模板标题是否重复
           const existingTemplate = await prisma.cMSDataTemplate.findFirst({
             where: {
               title: {
-                equals: title.trim(), // 使用用户原始标题检查重复
+                equals: title.trim(),
                 mode: 'insensitive'
               }
             }
@@ -236,18 +209,16 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
           if (!existingTemplate) {
             const newTemplate = await prisma.cMSDataTemplate.create({
               data: {
-                title: title, // 使用用户原始标题
-                categoryId, // 使用用户选择的分类
-                description: description, // 使用用户原始描述
-                imageUrl: imageUrl || null, // 使用用户上传的图片
-                iframeUrl: iframeUrl || null, // 使用用户提供的iframe链接
-                tags: [], // 模板不使用AI生成的标签，保持空数组
+                title: title,
+                categoryId,
+                description: description,
+                imageUrl: imageUrl || null,
+                iframeUrl: iframeUrl || null,
+                tags: [],
                 publishDate: new Date(),
                 createdBy: req.user.id
               }
             });
-            
-            console.log('✅ 数据模板创建成功:', newTemplate.id);
             
             // 记录模板创建日志
             await prisma.cMSOperationLog.create({
@@ -259,11 +230,9 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
                 description: `自动创建数据模板: ${title}`
               }
             });
-          } else {
-            console.log('⚠️ 模板标题已存在，跳过模板创建');
           }
         } catch (templateError) {
-          console.error('❌ 自动创建模板失败:', templateError);
+          console.error('自动创建模板失败:', templateError);
           // 不影响主流程，只记录错误
         }
       }
@@ -328,7 +297,6 @@ router.post('/generate-from-template', authenticateToken, requireUser, async (re
     }
 
     // 调用AI服务生成内容
-    console.log('🤖 从模板AI服务调用开始，选项:', options);
     const aiGeneratedData = await aiService.generateContent({
       title,
       description,
@@ -336,14 +304,6 @@ router.post('/generate-from-template', authenticateToken, requireUser, async (re
       iframeUrl,
       options,
       categoryInfo
-    });
-
-    console.log('✅ AI生成完成，返回数据:', {
-      title: aiGeneratedData.title,
-      hasDescription: !!aiGeneratedData.description,
-      hasSEO: !!aiGeneratedData.seoTitle,
-      hasHTML: !!aiGeneratedData.detailsHtml,
-      hasAddressBar: !!aiGeneratedData.addressBar
     });
 
     res.json({

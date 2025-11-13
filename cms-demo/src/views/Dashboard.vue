@@ -306,7 +306,6 @@ const formatTime = (time) => {
 const fetchAIStats = async () => {
   try {
     aiLoading.value = true
-    console.log('🤖 正在获取AI使用统计...')
     
     const [aiUsageResponse, aiStatusResponse] = await Promise.all([
       statsAPI.getAIUsage('30d'),
@@ -315,16 +314,14 @@ const fetchAIStats = async () => {
     
     if (aiUsageResponse.data?.success) {
       aiStats.value = aiUsageResponse.data.data
-      console.log('✅ AI使用统计获取成功:', aiStats.value.summary)
     }
     
     if (aiStatusResponse.data?.success) {
       aiStatus.value = aiStatusResponse.data.data
-      console.log('✅ AI服务状态获取成功:', aiStatus.value.provider)
     }
     
   } catch (error) {
-    console.error('❌ 获取AI统计失败:', error)
+    console.error('获取AI统计失败:', error)
   } finally {
     aiLoading.value = false
   }
@@ -334,7 +331,6 @@ const fetchAIStats = async () => {
 const fetchStats = async () => {
   try {
     loading.value = true
-    console.log('📊 正在获取真实统计数据...')
     const response = await statsAPI.getOverview()
     
     if (response.data?.success && response.data?.data?.overview) {
@@ -345,12 +341,11 @@ const fetchStats = async () => {
         totalProjects: overview.totalProjects,
         totalProjectData: overview.totalProjectData
       }
-      console.log('✅ 统计数据获取成功:', stats.value)
     } else {
       throw new Error('统计数据格式错误')
     }
   } catch (error) {
-    console.error('❌ 获取统计数据失败:', error)
+    console.error('获取统计数据失败:', error)
     // 如果API调用失败，使用默认值
     stats.value = {
       totalTemplates: 0,

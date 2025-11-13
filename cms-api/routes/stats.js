@@ -8,8 +8,6 @@ const router = express.Router();
 // 获取系统统计概览
 router.get('/overview', authenticateToken, async (req, res) => {
   try {
-    console.log('📊 获取系统统计概览...');
-    
     // 并行获取各种统计数据
     const [
       totalTemplates,
@@ -158,14 +156,6 @@ router.get('/overview', authenticateToken, async (req, res) => {
       dailyStats: convertBigIntToNumber(dailyStats)
     };
 
-    console.log('✅ 统计概览获取成功:', {
-      totalTemplates,
-      totalCategories,
-      totalProjects,
-      totalProjectData,
-      totalUsers
-    });
-
     res.json({
       success: true,
       data: stats
@@ -296,8 +286,6 @@ router.get('/detailed', authenticateToken, async (req, res) => {
 // 获取AI使用情况统计
 router.get('/ai-usage', authenticateToken, async (req, res) => {
   try {
-    console.log('🤖 获取AI使用情况统计...');
-    
     const { timeRange = '30d' } = req.query;
     
     // 计算时间范围
@@ -449,12 +437,6 @@ router.get('/ai-usage', authenticateToken, async (req, res) => {
       provider: process.env.AI_PROVIDER || 'gemini'
     };
     
-    console.log('✅ AI使用统计获取成功:', {
-      totalAiGenerated,
-      aiTemplates,
-      aiProjectData
-    });
-    
     res.json({
       success: true,
       data: aiStats
@@ -472,8 +454,6 @@ router.get('/ai-usage', authenticateToken, async (req, res) => {
 // 获取AI服务状态
 router.get('/ai-status', authenticateToken, async (req, res) => {
   try {
-    console.log('🔍 检查AI服务状态...');
-    
     // 导入AI服务
     const aiService = (await import('../utils/aiService.js')).default;
     
@@ -505,8 +485,6 @@ router.get('/ai-status', authenticateToken, async (req, res) => {
     }
     
     aiStatus.testResult = testResult;
-    
-    console.log('✅ AI服务状态检查完成:', aiStatus);
     
     res.json({
       success: true,
