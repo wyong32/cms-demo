@@ -202,6 +202,34 @@ class AIService {
     } catch (error) {
       console.error('Gemini API调用失败:', error);
       
+      // 检查是否是网络连接错误（fetch failed）
+      if (error.message && (
+        error.message.includes('fetch failed') || 
+        error.message.includes('ECONNREFUSED') ||
+        error.message.includes('ENOTFOUND') ||
+        error.message.includes('ETIMEDOUT') ||
+        error.message.includes('network')
+      )) {
+        // 网络错误，使用模拟数据作为降级方案
+        console.warn('AI服务网络连接失败，使用模拟数据:', error.message);
+        const mockData = this.generateMockContent({ title, description, imageUrl, iframeUrl, options, categoryInfo });
+        
+        return {
+          ...mockData,
+          _quotaWarning: {
+            code: 'NETWORK_ERROR',
+            message: 'AI服务网络连接失败，已使用模拟数据生成内容',
+            details: {
+              provider: 'gemini',
+              model: 'gemini-2.0-flash-exp',
+              error: error.message,
+              suggestion: '请检查网络连接或API密钥配置。如果使用的是本地环境，请确认已配置GOOGLE_API_KEY环境变量'
+            },
+            suggestion: '请检查网络连接和API密钥配置。如果问题持续，请联系管理员'
+          }
+        };
+      }
+      
       // 检查是否是配额限制错误（429）
       if (error.status === 429 || (error.message && error.message.includes('429'))) {
         // 提取重试延迟信息
@@ -294,8 +322,8 @@ class AIService {
     // 组合完整提示词
     return `${this._buildPromptHeader(randomStyle, randomFactor)}
 ${this._buildPromptInputs(title, description, titleKeywords, categoryInfo, imageUrl, iframeUrl)}
-${this._buildPromptGuidelines()}
-${this._buildPromptOutputFormat(title)}
+${this._buildPromptGuidelines(categoryInfo)}
+${this._buildPromptOutputFormat(title, categoryInfo)}
 `;
   }
 
@@ -324,25 +352,27 @@ ${this._buildPromptOutputFormat(title)}
   （注意：仅作参考，不要直接复制，需要基于此进行创意扩展和重新组织）
 - 目标关键词：${keywords.join(', ')}`;
 
-    // 添加分类信息
+    // 添加分类信息（非常重要，用于判断内容结构和风格）
     if (categoryInfo) {
       inputs += `
-- 内容分类：${categoryInfo.name}
+- 内容分类：${categoryInfo.name}（请仔细理解此分类的性质和特点）
 - 分类类型：${categoryInfo.type}`;
       if (categoryInfo.description) {
         inputs += `
-- 分类描述：${categoryInfo.description}`;
+- 分类描述：${categoryInfo.description}（这有助于理解分类的特征和内容方向）`;
       }
+      inputs += `
+  （重要：分类信息是判断内容结构、写作风格和段落组织方式的关键依据）`;
     }
 
     // 添加媒体资源
     if (imageUrl) {
       inputs += `
-- 图片地址：${imageUrl}`;
+- 图片地址：${imageUrl}（可用于理解内容主题，但不要插入图片标签）`;
     }
     if (iframeUrl) {
       inputs += `
-- 相关链接：${iframeUrl}`;
+- 相关链接：${iframeUrl}（可用于理解内容上下文）`;
     }
 
     return inputs;
@@ -351,39 +381,119 @@ ${this._buildPromptOutputFormat(title)}
   /**
    * 构建内容生成指导原则
    */
-  _buildPromptGuidelines() {
-    return `
+  _buildPromptGuidelines(categoryInfo) {
+    let guidelines = `
 
 【内容生成指导原则】
 1. 创意与原创性
-   - 基于用户描述进行创意扩展和重新组织，绝对不要直接复制原文
-   - 让AI根据分类和描述信息自由创作，不要使用固定模板
-   - 每次生成都要有独特的角度和表达方式，充分发挥创造力
-   - 避免使用模板化的开头和结尾，要根据内容类型创造独特的体验
+   - 基于用户提供的标题、描述和分类信息进行创意扩展和重新组织
+   - 绝对不要直接复制用户描述，要进行创意扩展和重新创作
+   - 充分发挥创造力，使用生动的语言和画面感强的描述
+   - 每次生成都要有独特的角度和表达方式，避免模板化
+   - 用感官描述（视觉、听觉、触觉）让内容更生动、更具沉浸感
+   - 使用动作性词汇和节奏感强的短句来增强吸引力
 
 2. 内容质量要求
    - 生成的简要描述和详细HTML内容要完全不同，各自服务不同用途
-   - 根据分类信息（如果提供）来判断内容风格和写作方式
-   - 根据内容类型（新闻、博客、视频、产品等）调整写作风格和结构
-   - 内容要包含具体的数据、案例、引用或特色功能，增加可信度和独特性
+   - 仔细分析用户提供的分类信息（分类名称、类型、描述），理解内容所属的领域和性质
+   - 根据分类信息判断合适的内容风格、写作方式和段落结构
+   - 内容要包含具体细节、场景描述、体验感受，增加真实感和吸引力
+   - 避免使用"这是一个..."、"让我们..."等模板化开头
 
-3. SEO优化要求
+3. 内容结构灵活性
+   - 不要固定使用 About/Features/FAQ 这样的标准模板
+   - 根据分类信息和内容特性，自然组织最合适的段落结构
+   - 结构要自然流畅，符合该分类内容的阅读习惯和用户期望
+   - 可以灵活使用各种段落标题，如：Overview、Details、Highlights、Tips、Guide、Review、FAQ 等
+   - 使用合适的HTML标签：h2、h3、p、ul、ol、li、strong、em、blockquote 等
+   - 内容总长度不少于1000字符，每个主要段落不少于150字符
+
+4. SEO优化要求
    - 在HTML内容中，目标关键词的密度应达到约5%
    - 关键词应自然分布在标题、段落、列表等各个部分
    - 避免关键词堆砌，保持内容自然流畅
    - 关键词密度计算：目标关键词出现次数 ÷ 总词数 × 100% ≈ 5%
 
-4. 技术规范
-   - HTML内容请使用简洁的样式，避免复杂的内联样式和背景色
-   - 优先使用语义化HTML标签和简单的文本样式
-   - 避免使用gradient、复杂背景色等样式
-   - HTML结构从H2开始，不要从H1开始`;
+5. HTML技术规范
+   - 不要使用内联样式（style属性），只使用纯HTML标签
+   - 使用语义化HTML标签：h2、h3、p、ul、ol、li、strong、em、blockquote 等
+   - HTML代码必须格式化，每个标签都要换行，要有适当的缩进（2个空格）
+   - 不要将整个HTML压缩成一行，要有良好的可读性
+   - 不要插入图片标签（img），只使用文本描述
+   - HTML结构从h2标题开始，不要使用h1
+   - 示例格式：
+<div>
+  <h2>标题</h2>
+  <p>段落内容...</p>
+  <h3>子标题</h3>
+  <ul>
+    <li>列表项1</li>
+    <li>列表项2</li>
+  </ul>
+</div>`;
+
+    // 如果提供了分类信息，添加分类相关的指导
+    if (categoryInfo) {
+      const categoryName = categoryInfo.name || '';
+      const categoryType = categoryInfo.type || '';
+      const categoryDesc = categoryInfo.description || '';
+      
+      guidelines += `
+
+【基于分类信息的内容指导】
+   - 分类名称：${categoryName}
+   - 分类类型：${categoryType}${categoryDesc ? `\n   - 分类描述：${categoryDesc}` : ''}
+   - 请仔细理解该分类的性质和特点，生成符合该分类特征的内容
+   - 根据分类信息判断合适的内容结构、写作风格和重点内容
+   - 让生成的内容自然契合该分类，而不是生搬硬套固定模板`;
+    }
+    
+    return guidelines;
   }
 
   /**
    * 构建输出格式说明（核心部分）
    */
-  _buildPromptOutputFormat(title) {
+  _buildPromptOutputFormat(title, categoryInfo) {
+    // 根据分类信息提供动态的结构示例
+    // 不固定特定类型，让AI根据分类信息自己判断合适的结构
+    const categoryInfoText = categoryInfo 
+      ? `（分类：${categoryInfo.name}，类型：${categoryInfo.type}${categoryInfo.description ? `，描述：${categoryInfo.description}` : ''}）`
+      : '';
+    
+    const structureExample = `
+<div>
+  <h2>${title}</h2>
+  <p>生动的开场段落，基于分类特性和标题，用感官描述吸引读者...</p>
+  
+  <h3>根据内容特性组织的段落标题1</h3>
+  <p>详细内容段落，深入展开主题，不少于150字符...</p>
+  
+  <h3>根据内容特性组织的段落标题2</h3>
+  <p>继续展开相关内容，提供具体细节和描述...</p>
+  
+  <h3>相关内容或亮点</h3>
+  <ul>
+    <li>要点1：详细描述...</li>
+    <li>要点2：详细描述...</li>
+    <li>要点3：详细描述...</li>
+  </ul>
+  
+  <h3>实用信息或策略（如适用）</h3>
+  <ol>
+    <li><strong>信息项1:</strong> 详细说明...</li>
+    <li><strong>信息项2:</strong> 详细说明...</li>
+  </ol>
+  
+  <h3>FAQ或总结</h3>
+  <ol>
+    <li><strong>常见问题1?</strong><br>详细答案...</li>
+    <li><strong>常见问题2?</strong><br>详细答案...</li>
+  </ol>
+  
+  <p>总结段落，用有吸引力的语言结束，不少于100字符...</p>
+</div>`;
+    
     return `
 
 【返回格式说明】
@@ -394,29 +504,30 @@ ${this._buildPromptOutputFormat(title)}
   
   "description": "字符串，简要描述（最多300字符）",
     // 用于列表展示和表单显示
-    // 要求：基于用户描述重新组织创作，体现独特卖点，不要直接复制
+    // 要求：基于用户描述和分类信息重新组织创作，体现独特卖点，不要直接复制
+    // 使用生动、吸引人的语言，符合分类特性
   
   "tags": ["标签1", "标签2", "标签3"],
-    // 数组，根据标题和内容生成3-5个相关英文标签
-    // 示例：新闻类用时事词汇，技术类用专业术语，娱乐类用流行词汇
+    // 数组，根据标题、描述和分类信息生成3-5个相关英文标签
+    // 标签要与分类特性相关，使用该领域的专业术语或流行词汇
   
   "imageUrl": "字符串，用户提供的图片地址（直接使用，无需修改）",
   
   "imageAlt": "字符串，图片alt文本",
     // 用英文描述图片内容，需包含目标关键词
-    // 要求：描述生动具体且符合内容类型
+    // 要求：描述生动具体，符合分类特性和内容类型
   
   "seoTitle": "字符串，SEO优化标题（40-80个字符）",
-    // 基于原标题优化，添加吸引点击的词汇
-    // 示例：原标题 + 特色描述（如 "- Play Free Online" / "- Complete Guide"）
+    // 基于原标题和分类信息优化，添加吸引点击的词汇
+    // 示例：原标题 + 特色描述（根据分类特性添加如 "- Play Free Online" / "- Complete Guide" / "- Review" 等）
   
   "seoDescription": "字符串，SEO描述（140-160字符）",
     // 用于搜索引擎展示，要吸引用户点击
-    // 要求：包含核心关键词，描述清晰有吸引力
+    // 要求：包含核心关键词，描述清晰有吸引力，符合分类特性
   
   "seoKeywords": "字符串，SEO关键词",
     // 用逗号分隔（80-100个字符）
-    // 要求：包含核心关键词和相关词汇
+    // 要求：包含核心关键词和相关词汇，与分类相关
   
   "addressBar": "字符串，URL友好的地址栏",
     // 直接基于标题生成，使用小写字母和连字符
@@ -425,19 +536,23 @@ ${this._buildPromptOutputFormat(title)}
   
   "detailsHtml": "字符串，详细的HTML内容（不少于1000字符）"
     // 用于详情页面展示的完整HTML内容
-    // 必须使用以下结构框架：
-    ${AIService.HTML_STRUCTURE_TEMPLATE}
-    
     // 重要要求：
-    // - HTML内容总字符数必须不少于1000字符
-    // - 替换模板中的所有占位符为具体、丰富的内容
-    // - 不要直接复制用户描述，要进行创意扩展
-    // - 根据分类信息调整内容风格
-    // - 引言至少100字符，About至少200字符
-    // - Features列表至少5-8个项目（总计至少300字符）
-    // - FAQ至少4-6个问答（总计至少300字符）
-    // - 总结段落至少100字符
-    // - 每个部分都要有足够的内容深度和详细度
+    // 1. 仔细分析用户提供的分类信息（分类名称、类型、描述），理解内容所属的领域和性质
+    // 2. 根据分类信息判断最合适的内容结构、写作风格和段落组织方式
+    // 3. 内容要生动、有画面感，使用感官描述和动作性语言，符合分类特性
+    // 4. 不要固定使用About/Features/FAQ模板，要根据分类特性自然组织最合适的段落结构
+    // 5. 可以灵活使用各种段落标题，如：Overview、Details、Highlights、Tips、Guide、Review、FAQ、How to Play 等
+    // 6. 让内容结构自然契合该分类，而不是生搬硬套固定模板
+    // 7. HTML代码必须格式化，每个标签换行，有适当缩进（2个空格），不要压缩成一行
+    // 8. 不要使用内联样式（style属性），只使用纯HTML标签
+    // 9. 不要插入图片标签（img），只用文本描述
+    // 10. 使用语义化标签：h2、h3、p、ul、ol、li、strong、em、blockquote 等
+    // 11. 内容总长度不少于1000字符，每个主要段落不少于150字符
+    // 12. 不要直接复制用户描述，要进行创意扩展和重新创作
+    // 13. 使用生动的语言，避免模板化的表达方式
+    
+    // 通用结构示例${categoryInfoText}（请根据分类特性灵活调整结构）：
+    ${structureExample}
 }
 
 【字段生成要点】
@@ -446,21 +561,40 @@ ${this._buildPromptOutputFormat(title)}
 - description 是简要版本（300字符内），detailsHtml 是详细版本（1000字符以上）
 - description 和 detailsHtml 的内容要完全不同，不要重复
 - 每次生成都要创造独特的内容体验，避免重复使用相同的表达方式
+- detailsHtml中的内容要生动、有画面感，让读者有身临其境的感觉
+
+【HTML格式化要求】
+- HTML代码必须格式化，每个标签都要换行
+- 使用适当的缩进（2个空格）
+- 不要将整个HTML压缩成一行
+- 示例格式：
+<div>
+  <h2>标题</h2>
+  <p>段落内容...</p>
+  <ul>
+    <li>列表项</li>
+  </ul>
+</div>
 
 【输出示例】
-请直接返回JSON格式，不要任何解释文字：
+请直接返回JSON格式，不要任何解释文字。
+注意：detailsHtml字段中的HTML代码必须格式化（换行），即使是在JSON字符串中也要保留换行符（使用\\n）。
+
+示例JSON结构（detailsHtml的换行格式）：
 {
   "title": "${title}",
-  "description": "简要英文描述（最多300字符，基于用户描述创意重写）",
-  "tags": ["keyword1", "keyword2", "keyword3"],
+  "description": "简要英文描述（最多300字符，基于分类和用户描述，生动有吸引力）",
+  "tags": ["与标题和描述相关的英文标签1", "英文标签2", "英文标签3"],
   "imageUrl": "用户提供的图片地址",
-  "imageAlt": "英文图片描述（包含目标关键词）",
-  "seoTitle": "基于原标题优化的SEO标题（40-80字符）",
-  "seoDescription": "SEO英文描述（140-160字符，包含目标关键词）",
-  "seoKeywords": "英文关键词1, 英文关键词2, 英文关键词3（80-100字符）",
+  "imageAlt": "英文图片描述（包含目标关键词，符合分类特性）",
+  "seoTitle": "基于原标题和分类优化的SEO标题（40-80字符）",
+  "seoDescription": "SEO英文描述（140-160字符，包含目标关键词，符合分类特性）",
+  "seoKeywords": "与标题和描述相关的英文关键词1, 英文关键词2, 英文关键词3（80-100字符）",
   "addressBar": "url-friendly-address",
-  "detailsHtml": "<div style=\\"font-family: Arial, sans-serif; line-height: 1.6; color: #333;\\"><h2>${title}</h2><p>引言内容...</p><h3>About</h3><p>详细介绍...</p><h3>Features</h3><ul><li>特点1...</li><li>特点2...</li></ul><h3>FAQ</h3><ul><li><div class=\\"faq-question\\">问题1</div><div class=\\"faq-answer\\">答案1</div></li></ul><p>总结内容...</p></div>"
-}`;
+  "detailsHtml": "<div>\\n  <h2>${title}</h2>\\n  <p>生动的开场段落...</p>\\n  <h3>根据分类特性组织的段落标题</h3>\\n  <p>详细内容...</p>\\n  <ul>\\n    <li>要点1</li>\\n    <li>要点2</li>\\n  </ul>\\n  <p>总结段落...</p>\\n</div>"
+}
+
+请记住：仔细分析用户提供的分类信息（如果有），根据分类特性生成最合适的内容结构和写作风格，而不是使用固定模板。`;
   }
 
   /**
@@ -479,6 +613,15 @@ ${this._buildPromptOutputFormat(title)}
     // 为必填字段提供默认值，避免验证失败
     const title = response.title || '';
     const description = response.description || '';
+    
+    // 处理detailsHtml，确保换行符正确
+    let detailsHtml = response.detailsHtml || this.generateDetailContent(title, description, description);
+    if (detailsHtml) {
+      // 将JSON中的\n转义字符转换为真正的换行符
+      detailsHtml = detailsHtml.replace(/\\n/g, '\n');
+      // 移除内联样式（如果存在）
+      detailsHtml = detailsHtml.replace(/\s+style\s*=\s*["'][^"']*["']/gi, '');
+    }
 
     return {
       title: title,
@@ -489,7 +632,7 @@ ${this._buildPromptOutputFormat(title)}
       seoDescription: response.seoDescription || this.generateSeoDescription(description),
       seoKeywords: response.seoKeywords || this.generateSeoKeywords(title, response.tags),
       addressBar: response.addressBar || this.generateAddressBar(title) || 'default-address',
-      detailsHtml: response.detailsHtml || this.generateDetailContent(title, description, description)
+      detailsHtml: detailsHtml
     };
   }
 
