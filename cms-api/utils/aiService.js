@@ -415,10 +415,11 @@ ${this._buildPromptOutputFormat(title, categoryInfo)}
    - 避免使用"这是一个..."、"让我们..."等模板化开头
 
 4. 内容结构灵活性
-   - 不要固定使用 About/Features/FAQ 这样的标准模板
+   - 不要固定使用 About/Features 这样的标准模板，但必须包含FAQ部分
    - 根据分类信息和内容特性，自然组织最合适的段落结构
    - 结构要自然流畅，符合该分类内容的阅读习惯和用户期望
-   - 可以灵活使用各种段落标题，如：Overview、Details、Highlights、Tips、Guide、Review、FAQ 等
+   - 可以灵活使用各种段落标题，如：Overview、Details、Highlights、Tips、Guide、Review、How to Play、Game Modes 等
+   - 必须包含FAQ（常见问题）部分，包含4-6个基于用户描述信息的常见问题和详细答案
    - 使用合适的HTML标签：h2、h3、p、ul、ol、li、strong、em、blockquote 等
    - 内容总长度不少于1000字符，每个主要段落不少于150字符
 
@@ -499,10 +500,12 @@ ${this._buildPromptOutputFormat(title, categoryInfo)}
     <li><strong>信息项2:</strong> 详细说明...</li>
   </ol>
   
-  <h3>FAQ或总结</h3>
+  <h3>FAQ</h3>
   <ol>
-    <li><strong>常见问题1?</strong><br>详细答案...</li>
-    <li><strong>常见问题2?</strong><br>详细答案...</li>
+    <li><strong>常见问题1?</strong><br>基于用户描述中的信息生成的详细答案...</li>
+    <li><strong>常见问题2?</strong><br>基于用户描述中的信息生成的详细答案...</li>
+    <li><strong>常见问题3?</strong><br>基于用户描述中的信息生成的详细答案...</li>
+    <li><strong>常见问题4?</strong><br>基于用户描述中的信息生成的详细答案...</li>
   </ol>
   
   <p>总结段落，用有吸引力的语言结束，不少于100字符...</p>
@@ -561,16 +564,21 @@ ${this._buildPromptOutputFormat(title, categoryInfo)}
     // 3. 根据分类信息和用户描述的关键信息，判断最合适的内容结构、写作风格和段落组织方式
     // 4. 内容要生动、有画面感，使用感官描述和动作性语言，符合分类特性
     // 5. 在确保信息完整的基础上，可以用生动的语言重新表达，但信息本身不能遗漏或改变
-    // 6. 不要固定使用About/Features/FAQ模板，要根据分类特性和内容特点自然组织最合适的段落结构
-    // 7. 可以灵活使用各种段落标题，如：Overview、Details、Highlights、Tips、Guide、Review、FAQ、How to Play、Game Modes 等
-    // 8. 让内容结构自然契合该分类和内容特性，而不是生搬硬套固定模板
-    // 9. HTML代码必须格式化，每个标签换行，有适当缩进（2个空格），不要压缩成一行
-    // 10. 不要使用内联样式（style属性），只使用纯HTML标签
-    // 11. 不要插入图片标签（img），只用文本描述
-    // 12. 使用语义化标签：h2、h3、p、ul、ol、li、strong、em、blockquote 等
-    // 13. 内容总长度不少于1000字符，每个主要段落不少于150字符
-    // 14. 使用生动的语言重新表达用户描述中的信息，但必须保留所有关键信息点
-    // 15. 避免模板化的表达方式
+    // 6. 必须包含FAQ部分：在detailsHtml中必须包含一个FAQ（常见问题）部分
+    //    - FAQ部分应包含4-6个常见问题和详细答案
+    //    - FAQ的问题和答案必须基于用户描述中的信息生成，不能凭空编造
+    //    - 使用有序列表（<ol>）格式，每个问题使用<strong>标签加粗，答案紧跟问题后
+    //    - FAQ示例格式：<ol><li><strong>问题?</strong><br>详细答案...</li></ol>
+    // 7. 不要固定使用About/Features模板，但FAQ部分是必需的
+    // 8. 可以灵活使用各种段落标题，如：Overview、Details、Highlights、Tips、Guide、Review、How to Play、Game Modes、FAQ 等
+    // 9. 让内容结构自然契合该分类和内容特性，而不是生搬硬套固定模板
+    // 10. HTML代码必须格式化，每个标签换行，有适当缩进（2个空格），不要压缩成一行
+    // 11. 不要使用内联样式（style属性），只使用纯HTML标签
+    // 12. 不要插入图片标签（img），只用文本描述
+    // 13. 使用语义化标签：h2、h3、p、ul、ol、li、strong、em、blockquote 等
+    // 14. 内容总长度不少于1000字符，每个主要段落不少于150字符，FAQ部分不少于200字符
+    // 15. 使用生动的语言重新表达用户描述中的信息，但必须保留所有关键信息点
+    // 16. 避免模板化的表达方式
     
     // 通用结构示例${categoryInfoText}（请根据分类特性灵活调整结构）：
     ${structureExample}
