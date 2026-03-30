@@ -1,49 +1,68 @@
 <template>
   <div class="rich-text-editor">
-    <div class="editor-mode-toolbar">
-      <el-button-group>
-        <el-button
-          :type="viewMode === 'editor' ? 'primary' : 'default'"
-          size="small"
+    <header class="rte-chrome">
+      <div class="rte-chrome-left">
+        <span class="rte-eyebrow">内容编辑</span>
+        <p class="rte-chrome-desc">
+          {{ viewMode === 'editor' ? '结构化正文 · 自动净化冗余属性' : '源码模式 · 样式原样保存' }}
+        </p>
+      </div>
+      <div class="rte-mode-rail" role="tablist" aria-label="编辑模式">
+        <button
+          type="button"
+          role="tab"
+          class="rte-mode-pill"
+          :class="{ 'is-active': viewMode === 'editor' }"
+          :aria-selected="viewMode === 'editor'"
           @click="switchMode('editor')"
         >
-          <el-icon><Edit /></el-icon>
-          可视化编辑
-        </el-button>
-        <el-button
-          :type="viewMode === 'html' ? 'primary' : 'default'"
-          size="small"
+          <el-icon class="rte-mode-icon"><Edit /></el-icon>
+          <span>可视化</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="rte-mode-pill"
+          :class="{ 'is-active': viewMode === 'html' }"
+          :aria-selected="viewMode === 'html'"
           @click="switchMode('html')"
         >
-          <el-icon><Document /></el-icon>
-          HTML代码
-        </el-button>
-      </el-button-group>
+          <el-icon class="rte-mode-icon"><Document /></el-icon>
+          <span>HTML</span>
+        </button>
+      </div>
+    </header>
+
+    <div v-if="viewMode === 'editor'" class="rte-visual">
+      <div class="rte-callout rte-callout--visual">
+        <span class="rte-callout-dot" aria-hidden="true" />
+        <p class="rte-callout-text">
+          标题、段落、链接、图片、列表；保存为语义化 HTML。复杂样式请切到「HTML」。
+        </p>
+      </div>
+      <div class="rte-canvas">
+        <div ref="quillContainer" class="rte-quill-root" :style="{ minHeight: editorHeight }"></div>
+      </div>
     </div>
 
-    <div v-if="viewMode === 'editor'" class="quill-editor-container">
-      <div class="visual-editor-tip">
-        <el-text type="info" size="small">
-          仅支持标题、段落、链接、图片、有序/无序列表；保存为干净 HTML。若需复杂样式请在「HTML代码」中编辑（可视化会去掉多余 class/style/data-*）。
-        </el-text>
+    <div v-else class="rte-html-pane">
+      <div class="rte-callout rte-callout--code">
+        <span class="rte-callout-dot rte-callout-dot--code" aria-hidden="true" />
+        <p class="rte-callout-text">
+          此处修改的 class、style、data-* 等均原样写入数据。
+        </p>
       </div>
-      <div ref="quillContainer" :style="{ height: editorHeight }"></div>
-    </div>
-
-    <div v-if="viewMode === 'html'" class="html-editor">
-      <div class="html-editor-header">
-        <el-text type="info" size="small">
-          直接编辑 HTML；在此手动添加的 class、style、data-* 等会原样保存。可视化模式仅输出标题/段落/链接/图片/列表，不自动加样式。
-        </el-text>
+      <div class="rte-code-shell">
+        <div class="rte-code-label">SOURCE</div>
+        <el-input
+          v-model="htmlContent"
+          type="textarea"
+          :rows="20"
+          placeholder="在此粘贴或编辑 HTML…"
+          class="rte-code-input"
+          @input="handleHtmlChange"
+        />
       </div>
-      <el-input
-        v-model="htmlContent"
-        type="textarea"
-        :rows="20"
-        placeholder="HTML代码"
-        class="html-textarea"
-        @input="handleHtmlChange"
-      />
     </div>
 
     <el-dialog
@@ -444,105 +463,361 @@ onUnmounted(() => {
 
 <style scoped>
 .rich-text-editor {
-  border: 1px solid #d9d9d9;
-  border-radius: 4px;
+  --rte-ink: #1c2b36;
+  --rte-ink-muted: #5c6f7d;
+  --rte-border: color-mix(in srgb, var(--el-border-color) 85%, var(--rte-ink));
+  --rte-surface: #fdfcfa;
+  --rte-surface-2: #f4f1eb;
+  --rte-accent: #2d6a5d;
+  --rte-accent-soft: color-mix(in srgb, var(--rte-accent) 14%, white);
+  --rte-shadow: 0 1px 2px rgb(28 43 54 / 0.06), 0 8px 24px rgb(28 43 54 / 0.06);
+  border: 1px solid var(--rte-border);
+  border-radius: 14px;
   overflow: hidden;
+  background: var(--rte-surface);
+  box-shadow: var(--rte-shadow);
 }
 
-.editor-mode-toolbar {
-  padding: 8px 12px;
-  background: #fafafa;
-  border-bottom: 1px solid #d9d9d9;
-  display: flex;
-  justify-content: flex-start;
-}
-
-.quill-editor-container {
-  background: #fff;
-  position: relative;
-  overflow: hidden;
-}
-
-.visual-editor-tip {
-  padding: 8px 12px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.html-editor {
-  padding: 12px;
-  background: #f8f9fa;
-}
-
-.html-editor-header {
-  margin-bottom: 8px;
-  padding: 4px 0;
-}
-
-.html-textarea :deep(.el-textarea__inner) {
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 14px;
-  line-height: 1.5;
-  border: none;
-  background: transparent;
-}
-
-:deep(.ql-container) {
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-:deep(.ql-editor) {
-  min-height: 300px;
-  padding: 16px;
-}
-
-:deep(.ql-toolbar.ql-snow) {
-  border: none;
-  border-bottom: 1px solid #e4e7ed;
-  padding: 8px 12px;
+.rte-chrome {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  min-height: 42px;
+  justify-content: space-between;
+  gap: 14px 20px;
+  padding: 14px 18px;
+  background: linear-gradient(165deg, #faf9f6 0%, #f3f0ea 100%);
+  border-bottom: 1px solid var(--rte-border);
 }
 
-:deep(.ql-container.ql-snow) {
-  border: none;
+.rte-chrome-left {
+  min-width: 0;
 }
 
-:deep(.ql-editor.ql-blank::before) {
-  color: #c0c4cc;
-  font-style: normal;
+.rte-eyebrow {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rte-accent);
+  margin-bottom: 4px;
 }
 
-:deep(.ql-toolbar .ql-formats) {
-  margin-right: 15px;
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
+.rte-chrome-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--rte-ink-muted);
+  line-height: 1.45;
+  max-width: 36ch;
 }
 
-:deep(.ql-toolbar button) {
-  margin: 0 2px;
-  height: 28px;
-  width: 28px;
+.rte-mode-rail {
+  display: inline-flex;
+  padding: 4px;
+  gap: 2px;
+  background: rgb(255 255 255 / 0.72);
+  border: 1px solid var(--rte-border);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.9);
+}
+
+.rte-mode-pill {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rte-ink-muted);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.rte-mode-pill:hover {
+  color: var(--rte-ink);
+  background: rgb(255 255 255 / 0.65);
+}
+
+.rte-mode-pill.is-active {
+  color: #fff;
+  background: var(--rte-accent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--rte-accent) 35%, transparent);
+}
+
+.rte-mode-pill:focus-visible {
+  outline: 2px solid var(--rte-accent);
+  outline-offset: 2px;
+}
+
+.rte-mode-icon {
+  font-size: 16px;
+}
+
+.rte-visual {
+  padding: 0 14px 14px;
+}
+
+.rte-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 4px 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--rte-accent) 18%, transparent);
+  background: var(--rte-accent-soft);
+}
+
+.rte-callout--code {
+  border-color: color-mix(in srgb, #6b5c4c 22%, transparent);
+  background: color-mix(in srgb, #6b5c4c 8%, white);
+}
+
+.rte-callout-dot {
   flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--rte-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rte-accent) 22%, transparent);
 }
 
-:deep(.ql-toolbar select) {
-  margin: 0 2px;
-  height: 28px;
-  min-width: 72px;
+.rte-callout-dot--code {
+  background: #6b5c4c;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #6b5c4c 20%, transparent);
 }
 
-:deep(.ql-toolbar .ql-picker) {
-  display: inline-block;
-  vertical-align: top;
+.rte-callout-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--rte-ink-muted);
+}
+
+.rte-canvas {
+  border-radius: 12px;
+  border: 1px solid var(--rte-border);
+  background: #fff;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8);
+}
+
+.rte-quill-root {
+  position: relative;
+}
+
+.rte-quill-root :deep(.ql-toolbar.ql-snow) {
+  border: none;
+  border-bottom: 1px solid var(--rte-border);
+  padding: 10px 12px 12px;
+  background: linear-gradient(180deg, #fbfaf8 0%, #f5f3ef 100%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 4px;
+}
+
+.rte-quill-root :deep(.ql-toolbar .ql-formats) {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 2px;
+  margin: 0;
+  padding: 4px 8px;
+  background: rgb(255 255 255 / 0.85);
+  border: 1px solid color-mix(in srgb, var(--rte-border) 70%, transparent);
+  border-radius: 10px;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.9);
+}
+
+.rte-quill-root :deep(.ql-toolbar button) {
+  width: 32px;
+  height: 32px;
+  margin: 0 1px;
+  padding: 0;
+  border-radius: 8px;
+  transition:
+    background 0.15s ease,
+    transform 0.12s ease;
+}
+
+.rte-quill-root :deep(.ql-toolbar button:hover) {
+  background: var(--rte-accent-soft);
+}
+
+.rte-quill-root :deep(.ql-toolbar button:active) {
+  transform: scale(0.96);
+}
+
+.rte-quill-root :deep(.ql-toolbar button.ql-active) {
+  background: color-mix(in srgb, var(--rte-accent) 22%, white);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rte-accent) 35%, transparent);
+}
+
+.rte-quill-root :deep(.ql-toolbar .ql-picker) {
   margin: 0 2px;
+  border-radius: 8px;
+  color: var(--rte-ink);
+}
+
+.rte-quill-root :deep(.ql-toolbar .ql-picker-label) {
+  border-radius: 8px;
+  padding: 4px 10px;
+  transition: background 0.15s ease;
+}
+
+.rte-quill-root :deep(.ql-toolbar .ql-picker-label:hover) {
+  background: var(--rte-accent-soft);
+}
+
+.rte-quill-root :deep(.ql-toolbar .ql-picker.ql-expanded .ql-picker-label) {
+  background: var(--rte-accent-soft);
+}
+
+.rte-quill-root :deep(.ql-toolbar select) {
+  height: 32px;
+  min-width: 88px;
+  margin: 0 2px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--rte-border) 80%, transparent);
+  background: #fff;
+  color: var(--rte-ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.rte-quill-root :deep(.ql-toolbar select:hover) {
+  border-color: color-mix(in srgb, var(--rte-accent) 40%, var(--rte-border));
+}
+
+.rte-quill-root :deep(.ql-snow .ql-stroke) {
+  stroke: var(--rte-ink-muted);
+}
+
+.rte-quill-root :deep(.ql-snow .ql-fill) {
+  fill: var(--rte-ink-muted);
+}
+
+.rte-quill-root :deep(.ql-toolbar button:hover .ql-stroke),
+.rte-quill-root :deep(.ql-toolbar button.ql-active .ql-stroke) {
+  stroke: var(--rte-accent);
+}
+
+.rte-quill-root :deep(.ql-toolbar button:hover .ql-fill),
+.rte-quill-root :deep(.ql-toolbar button.ql-active .ql-fill) {
+  fill: var(--rte-accent);
+}
+
+.rte-quill-root :deep(.ql-container.ql-snow) {
+  border: none;
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--rte-ink);
+}
+
+.rte-quill-root :deep(.ql-editor) {
+  min-height: 300px;
+  padding: 20px 22px 24px;
+}
+
+.rte-quill-root :deep(.ql-editor.ql-blank::before) {
+  color: #a8b0b8;
+  font-style: normal;
+  left: 22px;
+}
+
+.rte-quill-root :deep(.ql-editor h1) {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0.6em 0 0.35em;
+}
+
+.rte-quill-root :deep(.ql-editor h2) {
+  font-size: 1.4rem;
+  font-weight: 650;
+  margin: 0.55em 0 0.3em;
+}
+
+.rte-quill-root :deep(.ql-editor h3) {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 0.5em 0 0.25em;
+}
+
+.rte-quill-root :deep(.ql-editor p) {
+  margin: 0.4em 0;
+}
+
+.rte-quill-root :deep(.ql-editor a) {
+  color: var(--rte-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.rte-html-pane {
+  padding: 0 14px 14px;
+}
+
+.rte-code-shell {
+  position: relative;
+  border-radius: 12px;
+  border: 1px solid var(--rte-border);
+  background: #1e2428;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+
+.rte-code-label {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: rgb(255 255 255 / 0.28);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.rte-code-input :deep(.el-textarea__inner) {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 18px 16px 20px;
+  color: #e8e4dc;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  resize: vertical;
+  min-height: 320px;
+}
+
+.rte-code-input :deep(.el-textarea__inner):focus {
+  box-shadow: none;
+}
+
+.rte-code-input :deep(.el-textarea) {
+  --el-input-border-color: transparent;
+}
+
+.rte-code-input :deep(.el-textarea .el-input__wrapper) {
+  background: transparent;
+  box-shadow: none !important;
+  padding: 0;
+}
+
+.rte-code-input :deep(.el-textarea__inner)::placeholder {
+  color: rgb(232 228 220 / 0.35);
 }
 
 .image-uploader {
@@ -550,17 +825,25 @@ onUnmounted(() => {
 }
 
 .image-uploader :deep(.el-upload) {
-  border: 1px dashed #d9d9d9;
-  border-radius: 6px;
+  border: 1px dashed color-mix(in srgb, var(--rte-accent) 35%, var(--rte-border));
+  border-radius: 12px;
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  transition: all 0.3s;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
   width: 100%;
   height: 150px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--rte-surface-2);
+}
+
+.image-uploader :deep(.el-upload:hover) {
+  border-color: var(--rte-accent);
+  background: var(--rte-accent-soft);
 }
 
 .uploaded-image {
@@ -581,14 +864,16 @@ onUnmounted(() => {
 .image-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgb(28 43 54 / 0.55);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.3s;
+  transition: opacity 0.25s ease;
   color: white;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .uploaded-image:hover .image-overlay {
@@ -601,12 +886,13 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #8c939d;
+  color: var(--rte-ink-muted);
 }
 
 .upload-icon {
   font-size: 28px;
   margin-bottom: 8px;
+  color: var(--rte-accent);
 }
 
 .dialog-footer {
@@ -616,9 +902,37 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  :deep(.ql-editor) {
-    min-height: 250px;
-    padding: 12px;
+  .rte-chrome {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rte-mode-rail {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .rte-mode-pill {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .rte-chrome-desc {
+    max-width: none;
+  }
+
+  .rte-quill-root :deep(.ql-editor) {
+    min-height: 240px;
+    padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rte-mode-pill,
+  .rte-quill-root :deep(.ql-toolbar button),
+  .image-uploader :deep(.el-upload),
+  .image-overlay {
+    transition: none;
   }
 }
 </style>
