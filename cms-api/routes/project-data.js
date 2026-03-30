@@ -368,8 +368,11 @@ router.post('/', authenticateToken, requireUser, validateRequired(['projectId', 
       }
     }
 
-    // 验证必填字段
-    const requiredFields = project.fields.filter(field => field.isRequired);
+    // 验证必填字段（iframeUrl、tags 在前端与接口层均按选填处理）
+    const notRequiredInApi = new Set(['iframeUrl', 'tags']);
+    const requiredFields = project.fields.filter(
+      (field) => field.isRequired && !notRequiredInApi.has(field.fieldName)
+    );
     const missingFields = [];
 
     for (const field of requiredFields) {
@@ -658,8 +661,11 @@ router.put('/:id', authenticateToken, requireUser, async (req, res) => {
     }
 
     if (data) {
-      // 验证必填字段
-      const requiredFields = existingData.project.fields.filter(field => field.isRequired);
+      // 验证必填字段（iframeUrl、tags 在前端与接口层均按选填处理）
+      const notRequiredInApi = new Set(['iframeUrl', 'tags']);
+      const requiredFields = existingData.project.fields.filter(
+        (field) => field.isRequired && !notRequiredInApi.has(field.fieldName)
+      );
       const missingFields = [];
 
       for (const field of requiredFields) {

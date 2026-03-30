@@ -23,23 +23,23 @@
           type="button"
           role="tab"
           class="rte-mode-pill"
-          :class="{ 'is-active': viewMode === 'markdown' }"
-          :aria-selected="viewMode === 'markdown'"
-          @click="switchMode('markdown')"
-        >
-          <el-icon class="rte-mode-icon"><Notebook /></el-icon>
-          <span>Markdown</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="rte-mode-pill"
           :class="{ 'is-active': viewMode === 'html' }"
           :aria-selected="viewMode === 'html'"
           @click="switchMode('html')"
         >
           <el-icon class="rte-mode-icon"><Document /></el-icon>
           <span>HTML</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="rte-mode-pill"
+          :class="{ 'is-active': viewMode === 'markdown' }"
+          :aria-selected="viewMode === 'markdown'"
+          @click="switchMode('markdown')"
+        >
+          <el-icon class="rte-mode-icon"><Notebook /></el-icon>
+          <span>Markdown</span>
         </button>
       </div>
     </header>

@@ -55,19 +55,6 @@
               </el-form-item>
             </el-col>
           </el-row>
-
-          <el-row :gutter="20">
-            <el-col :span="24">
-              <el-form-item label="头部" prop="head">
-                <el-input
-                  v-model="form.head"
-                  type="textarea"
-                  :rows="3"
-                  placeholder="可选。填写后可在「操作」页复制代码中出现字段 head"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
           
           <!-- 是否保存为模板（仅在新建模式显示） -->
           <el-row :gutter="20" v-if="!isEdit">
@@ -93,7 +80,7 @@
                 <el-form-item 
                   :label="getFieldLabel(field)" 
                   :prop="`data.${field.fieldName}`"
-                  :required="field.isRequired"
+                  :required="isFormFieldRequired(field)"
                 >
                   <el-input
                     v-model="form.data[field.fieldName]"
@@ -107,7 +94,7 @@
                 <el-form-item 
                   :label="getFieldLabel(field)" 
                   :prop="`data.${field.fieldName}`"
-                  :required="field.isRequired"
+                  :required="isFormFieldRequired(field)"
                 >
                   <el-input
                     v-model="form.data[field.fieldName]"
@@ -123,7 +110,7 @@
                 <el-form-item 
                   :label="getFieldLabel(field)" 
                   :prop="`data.${field.fieldName}`"
-                  :required="field.isRequired"
+                  :required="isFormFieldRequired(field)"
                 >
                   <el-date-picker
                     v-model="form.data[field.fieldName]"
@@ -136,26 +123,38 @@
                 </el-form-item>
               </el-col>
               
-              <!-- 地址栏 -->
-              <el-col :span="getColSpan(field)" v-else-if="field.fieldName === 'addressBar'" :key="`addressBar-${field.id}`">
-                <el-form-item 
-                  :label="getFieldLabel(field)" 
-                  :prop="`data.${field.fieldName}`"
-                  :required="field.isRequired"
-                >
-                  <el-input
-                    v-model="form.data[field.fieldName]"
-                    :placeholder="`请输入${getFieldLabel(field)}`"
-                  />
-                </el-form-item>
-              </el-col>
+              <!-- 地址栏 + 头部（头部紧跟地址栏） -->
+              <template v-else-if="field.fieldName === 'addressBar'">
+                <el-col :span="getColSpan(field)" :key="`addressBar-${field.id}`">
+                  <el-form-item
+                    :label="getFieldLabel(field)"
+                    :prop="`data.${field.fieldName}`"
+                    :required="isFormFieldRequired(field)"
+                  >
+                    <el-input
+                      v-model="form.data[field.fieldName]"
+                      :placeholder="`请输入${getFieldLabel(field)}`"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="24" :key="`head-after-address-${field.id}`">
+                  <el-form-item label="头部" prop="head">
+                    <el-input
+                      v-model="form.head"
+                      type="textarea"
+                      :rows="3"
+                      placeholder="可选。填写后可在「操作」页复制代码中出现字段 head"
+                    />
+                  </el-form-item>
+                </el-col>
+              </template>
               
               <!-- iframe链接 -->
               <el-col :span="24" v-else-if="field.fieldName === 'iframeUrl'" :key="`iframeUrl-${field.id}`">
                 <el-form-item 
                   :label="getFieldLabel(field)" 
                   :prop="`data.${field.fieldName}`"
-                  :required="field.isRequired"
+                  :required="isFormFieldRequired(field)"
                 >
                   <div class="iframe-input-group">
                     <el-input
@@ -181,7 +180,7 @@
                     <el-form-item 
                       :label="getFieldLabel(field)" 
                       :prop="`data.${field.fieldName}`"
-                      :required="field.isRequired"
+                      :required="isFormFieldRequired(field)"
                     >
                       <el-upload
                         ref="uploadRef"
@@ -218,7 +217,7 @@
                         :key="`imageAlt-${altField.id}`"
                         :label="getFieldLabel(altField)" 
                         :prop="`data.${altField.fieldName}`"
-                        :required="altField.isRequired"
+                        :required="isFormFieldRequired(altField)"
                       >
                         <el-input
                           v-model="form.data[altField.fieldName]"
@@ -235,7 +234,7 @@
                 <el-form-item 
                   :label="getFieldLabel(field)" 
                   :prop="`data.${field.fieldName}`"
-                  :required="field.isRequired"
+                  :required="isFormFieldRequired(field)"
                 >
                   <el-select
                     v-model="form.data[field.fieldName]"
@@ -500,7 +499,9 @@ const rules = computed(() => {
   }
   
   projectFields.value.forEach(field => {
-    if (field.isRequired) {
+    const skipRequired =
+      field.fieldName === 'iframeUrl' || field.fieldName === 'tags'
+    if (field.isRequired && !skipRequired) {
       dynamicRules[`data.${field.fieldName}`] = [
         {
           required: true, 
@@ -520,6 +521,12 @@ const rules = computed(() => {
   
   return dynamicRules
 })
+
+/** 模板配置为必填但前端改为选填的字段 */
+const isFormFieldRequired = (field) => {
+  if (field.fieldName === 'iframeUrl' || field.fieldName === 'tags') return false
+  return field.isRequired
+}
 
 // 清除表单验证
 const clearValidation = () => {
