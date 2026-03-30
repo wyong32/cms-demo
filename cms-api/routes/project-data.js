@@ -19,6 +19,46 @@ function escapeForTemplateLiteral(str) {
     .replace(/\$\{/g, '\\${');
 }
 
+/** 生成代码时合并为 seo:{ title, description, keywords }（库内仍用 seo_title 等存储） */
+const SEO_SOURCE_FIELD_NAMES = new Set([
+  'seo_title',
+  'seo_description',
+  'seo_keywords',
+  'seoTitle',
+  'seoDescription',
+  'seoKeywords'
+]);
+
+function pickFirstDataValue(data, keys) {
+  for (const k of keys) {
+    if (data[k] !== undefined && data[k] !== null) return data[k];
+  }
+  return '';
+}
+
+function formatJsStringOrTemplate(value) {
+  const s = value === undefined || value === null ? '' : String(value);
+  if (/[\r\n]/.test(s)) {
+    return '`' + escapeForTemplateLiteral(s) + '`';
+  }
+  return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+}
+
+function buildNestedSeoJsBlock(projectFields, data) {
+  const hasSeoInProject = projectFields.some((f) => SEO_SOURCE_FIELD_NAMES.has(f.fieldName));
+  if (!hasSeoInProject) return '';
+
+  const title = pickFirstDataValue(data, ['seo_title', 'seoTitle']);
+  const description = pickFirstDataValue(data, ['seo_description', 'seoDescription']);
+  const keywords = pickFirstDataValue(data, ['seo_keywords', 'seoKeywords']);
+
+  const t = formatJsStringOrTemplate(title);
+  const d = formatJsStringOrTemplate(description);
+  const k = formatJsStringOrTemplate(keywords);
+
+  return `  seo: {\n    title: ${t},\n    description: ${d},\n    keywords: ${k}\n  },\n`;
+}
+
 /** Prisma/Postgres：代码已含 head 字段，但库表未加列时查询会 500 */
 function dbSchemaHint(error) {
   const msg = String(error?.message || error);
@@ -216,8 +256,18 @@ router.get('/:id/generate-code', authenticateToken, async (req, res) => {
       jsCode += `  head: \`${headEscaped}\`,\n`;
     }
 
+    let seoBlockEmitted = false;
     for (const field of projectData.project.fields) {
       const fieldName = field.fieldName;
+
+      if (SEO_SOURCE_FIELD_NAMES.has(fieldName)) {
+        if (!seoBlockEmitted) {
+          jsCode += buildNestedSeoJsBlock(projectData.project.fields, data);
+          seoBlockEmitted = true;
+        }
+        continue;
+      }
+
       const value = data[fieldName];
 
       if (value !== undefined && value !== null) {
