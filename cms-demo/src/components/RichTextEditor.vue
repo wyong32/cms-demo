@@ -82,6 +82,7 @@
                 plain
                 class="rte-op-btn"
                 :disabled="disabled"
+                @mousedown.prevent
                 @click="openInsertLink"
               >
                 <el-icon><LinkIcon /></el-icon>
@@ -97,6 +98,7 @@
                 plain
                 class="rte-op-btn"
                 :disabled="disabled"
+                @mousedown.prevent
                 @click="showImageDialog"
               >
                 <el-icon><Picture /></el-icon>
@@ -455,8 +457,9 @@ async function openInsertLink() {
     ElMessage.warning('请先选中要加链接的文字，再点「插入链接」')
     return
   }
+  const { index, length } = range
   try {
-    const { value } = await ElMessageBox.prompt('支持 http(s):// 或站内路径', '插入链接', {
+    const { value } = await ElMessageBox.prompt('支持 http(s)://、mailto: 或站内路径', '插入链接', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       inputPlaceholder: 'https://example.com 或 /path',
@@ -467,6 +470,17 @@ async function openInsertLink() {
     })
     const url = String(value).trim()
     quillInstance.focus()
+    await nextTick()
+    const docEnd = Math.max(0, quillInstance.getLength() - 1)
+    const idx = Math.min(Math.max(0, index), docEnd)
+    const maxLen = Math.max(0, docEnd - idx)
+    const len = Math.min(length, maxLen)
+    if (len <= 0) {
+      ElMessage.warning('选区已失效，请重新选中文字后再插入链接')
+      return
+    }
+    quillInstance.setSelection(idx, len)
+    await nextTick()
     quillInstance.format('link', url)
   } catch {
     /* 取消 */
