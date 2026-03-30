@@ -41,6 +41,82 @@
         </p>
       </div>
       <div class="rte-canvas">
+        <div class="rte-op-bar" :class="{ 'is-disabled': disabled }">
+          <div class="rte-op-grid">
+            <div class="rte-op-cell rte-op-cell--heading">
+              <span class="rte-op-label">段落与标题</span>
+              <p class="rte-op-desc">将光标放在一行内，再选择格式（对应 HTML 标签）</p>
+              <el-select
+                v-model="headerPick"
+                class="rte-op-select"
+                :disabled="disabled"
+                placeholder="选择"
+                @change="applyHeaderLevel"
+              >
+                <el-option label="正文段落 · &lt;p&gt;" value="p" />
+                <el-option label="一级标题 · &lt;h1&gt;" value="1" />
+                <el-option label="二级标题 · &lt;h2&gt;" value="2" />
+                <el-option label="三级标题 · &lt;h3&gt;" value="3" />
+                <el-option label="四级标题 · &lt;h4&gt;" value="4" />
+                <el-option label="五级标题 · &lt;h5&gt;" value="5" />
+                <el-option label="六级标题 · &lt;h6&gt;" value="6" />
+              </el-select>
+            </div>
+
+            <div class="rte-op-cell rte-op-cell--links">
+              <span class="rte-op-label">插入链接</span>
+              <p class="rte-op-desc">选中一段文字后点击，将变为可点击链接</p>
+              <el-button
+                type="primary"
+                plain
+                class="rte-op-btn"
+                :disabled="disabled"
+                @click="openInsertLink"
+              >
+                <el-icon><LinkIcon /></el-icon>
+                插入链接
+              </el-button>
+            </div>
+
+            <div class="rte-op-cell rte-op-cell--image">
+              <span class="rte-op-label">插入图片</span>
+              <p class="rte-op-desc">在光标处插入，支持上传或粘贴图片地址</p>
+              <el-button
+                type="primary"
+                plain
+                class="rte-op-btn"
+                :disabled="disabled"
+                @click="showImageDialog"
+              >
+                <el-icon><Picture /></el-icon>
+                插入图片
+              </el-button>
+            </div>
+
+            <div class="rte-op-cell rte-op-cell--lists">
+              <span class="rte-op-label">列表</span>
+              <p class="rte-op-desc">把当前行变为列表项；再点一次可取消</p>
+              <div class="rte-op-list-row">
+                <el-button
+                  :type="listActive === 'bullet' ? 'primary' : 'default'"
+                  class="rte-op-btn"
+                  :disabled="disabled"
+                  @click="toggleList('bullet')"
+                >
+                  无序列表 · &lt;ul&gt;&lt;li&gt;
+                </el-button>
+                <el-button
+                  :type="listActive === 'ordered' ? 'primary' : 'default'"
+                  class="rte-op-btn"
+                  :disabled="disabled"
+                  @click="toggleList('ordered')"
+                >
+                  有序列表 · &lt;ol&gt;&lt;li&gt;
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </div>
         <div ref="quillContainer" class="rte-quill-root" :style="{ minHeight: editorHeight }"></div>
       </div>
     </div>
@@ -132,8 +208,8 @@
 import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import Quill from 'quill'
 import 'quill/dist/quill.snow.css'
-import { Edit, Document, Plus } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { Edit, Document, Plus, Link as LinkIcon, Picture } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getApiBaseURL } from '../utils/apiBase.js'
 
 const props = defineProps({
@@ -154,6 +230,10 @@ let quillInstance = null
 const viewMode = ref('editor')
 const htmlContent = ref(props.modelValue || '')
 const editorHeight = ref(props.height)
+
+/** 与 Quill 当前行格式同步 */
+const headerPick = ref('p')
+const listActive = ref(null)
 
 const imageDialogVisible = ref(false)
 const imageInserting = ref(false)
@@ -258,8 +338,62 @@ function processVisualOutput(rawHtml) {
   return prettifyHtml(sanitizeVisualHtml(rawHtml))
 }
 
-const showImageDialog = () => {
+function syncToolbarFromEditor() {
   if (!quillInstance) return
+  const range = quillInstance.getSelection()
+  if (!range) return
+  const fmt = quillInstance.getFormat(range)
+  headerPick.value = fmt.header ? String(fmt.header) : 'p'
+  listActive.value = fmt.list === 'bullet' || fmt.list === 'ordered' ? fmt.list : null
+}
+
+function applyHeaderLevel(val) {
+  if (!quillInstance || props.disabled) return
+  quillInstance.focus()
+  if (val === 'p') quillInstance.format('header', false)
+  else quillInstance.format('header', Number(val))
+}
+
+function toggleList(type) {
+  if (!quillInstance || props.disabled) return
+  quillInstance.focus()
+  const fmt = quillInstance.getFormat()
+  if (fmt.list === type) {
+    quillInstance.format('list', false)
+    listActive.value = null
+  } else {
+    quillInstance.format('list', type)
+    listActive.value = type
+  }
+}
+
+async function openInsertLink() {
+  if (!quillInstance || props.disabled) return
+  const range = quillInstance.getSelection(true)
+  if (!range || range.length === 0) {
+    ElMessage.warning('请先选中要加链接的文字，再点「插入链接」')
+    return
+  }
+  try {
+    const { value } = await ElMessageBox.prompt('支持 http(s):// 或站内路径', '插入链接', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputPlaceholder: 'https://example.com 或 /path',
+      inputValidator: (v) => {
+        if (!v || !String(v).trim()) return '请输入链接地址'
+        return true
+      }
+    })
+    const url = String(value).trim()
+    quillInstance.focus()
+    quillInstance.format('link', url)
+  } catch {
+    /* 取消 */
+  }
+}
+
+const showImageDialog = () => {
+  if (!quillInstance || props.disabled) return
   savedSelection = quillInstance.getSelection()
   imageForm.value = { imageUrl: '', imageAlt: '', imageWidth: '' }
   imageDialogVisible.value = true
@@ -349,11 +483,7 @@ const quillOptions = {
   readOnly: props.disabled,
   formats: ['header', 'list', 'link', 'image'],
   modules: {
-    toolbar: [
-      [{ header: [1, 2, 3, 4, 5, 6, false] }],
-      ['link', 'image'],
-      [{ list: 'ordered' }, { list: 'bullet' }]
-    ]
+    toolbar: false
   }
 }
 
@@ -362,8 +492,6 @@ const initQuill = async () => {
 
   try {
     quillInstance = new Quill(quillContainer.value, quillOptions)
-    const toolbar = quillInstance.getModule('toolbar')
-    toolbar.addHandler('image', () => showImageDialog())
 
     const initial = htmlContent.value || ''
     if (initial.trim()) {
@@ -382,6 +510,13 @@ const initQuill = async () => {
       emit('update:modelValue', out)
       emit('change', out)
     })
+
+    quillInstance.on('selection-change', (range) => {
+      if (range && quillInstance) syncToolbarFromEditor()
+    })
+
+    await nextTick()
+    syncToolbarFromEditor()
   } catch (error) {
     console.error('Quill初始化失败:', error)
   }
@@ -463,6 +598,10 @@ onUnmounted(() => {
 
 <style scoped>
 .rich-text-editor {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   --rte-ink: #1c2b36;
   --rte-ink-muted: #5c6f7d;
   --rte-border: color-mix(in srgb, var(--el-border-color) 85%, var(--rte-ink));
@@ -560,8 +699,11 @@ onUnmounted(() => {
 }
 
 .rte-visual {
+  width: 100%;
   padding: 0 14px 14px;
+  box-sizing: border-box;
 }
+
 
 .rte-callout {
   display: flex;
@@ -602,6 +744,8 @@ onUnmounted(() => {
 }
 
 .rte-canvas {
+  width: 100%;
+  max-width: 100%;
   border-radius: 12px;
   border: 1px solid var(--rte-border);
   background: #fff;
@@ -609,111 +753,91 @@ onUnmounted(() => {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8);
 }
 
+.rte-op-bar {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--rte-border);
+  background: linear-gradient(180deg, #f7f5f1 0%, #efede8 100%);
+}
+
+.rte-op-bar.is-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.rte-op-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  align-items: start;
+}
+
+.rte-op-cell {
+  min-width: 0;
+  padding: 12px 14px;
+  background: rgb(255 255 255 / 0.88);
+  border: 1px solid color-mix(in srgb, var(--rte-border) 75%, transparent);
+  border-radius: 10px;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.95);
+}
+
+.rte-op-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--rte-ink);
+  margin-bottom: 4px;
+}
+
+.rte-op-desc {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--rte-ink-muted);
+}
+
+.rte-op-select {
+  width: 100%;
+}
+
+.rte-op-select :deep(.el-select__wrapper) {
+  min-height: 36px;
+}
+
+.rte-op-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.rte-op-list-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rte-op-list-row .el-button {
+  margin: 0;
+  width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .rte-op-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .rte-op-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .rte-quill-root {
   position: relative;
-}
-
-.rte-quill-root :deep(.ql-toolbar.ql-snow) {
-  border: none;
-  border-bottom: 1px solid var(--rte-border);
-  padding: 10px 12px 12px;
-  background: linear-gradient(180deg, #fbfaf8 0%, #f5f3ef 100%);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 4px;
-}
-
-.rte-quill-root :deep(.ql-toolbar .ql-formats) {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 2px;
-  margin: 0;
-  padding: 4px 8px;
-  background: rgb(255 255 255 / 0.85);
-  border: 1px solid color-mix(in srgb, var(--rte-border) 70%, transparent);
-  border-radius: 10px;
-  box-shadow: 0 1px 0 rgb(255 255 255 / 0.9);
-}
-
-.rte-quill-root :deep(.ql-toolbar button) {
-  width: 32px;
-  height: 32px;
-  margin: 0 1px;
-  padding: 0;
-  border-radius: 8px;
-  transition:
-    background 0.15s ease,
-    transform 0.12s ease;
-}
-
-.rte-quill-root :deep(.ql-toolbar button:hover) {
-  background: var(--rte-accent-soft);
-}
-
-.rte-quill-root :deep(.ql-toolbar button:active) {
-  transform: scale(0.96);
-}
-
-.rte-quill-root :deep(.ql-toolbar button.ql-active) {
-  background: color-mix(in srgb, var(--rte-accent) 22%, white);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rte-accent) 35%, transparent);
-}
-
-.rte-quill-root :deep(.ql-toolbar .ql-picker) {
-  margin: 0 2px;
-  border-radius: 8px;
-  color: var(--rte-ink);
-}
-
-.rte-quill-root :deep(.ql-toolbar .ql-picker-label) {
-  border-radius: 8px;
-  padding: 4px 10px;
-  transition: background 0.15s ease;
-}
-
-.rte-quill-root :deep(.ql-toolbar .ql-picker-label:hover) {
-  background: var(--rte-accent-soft);
-}
-
-.rte-quill-root :deep(.ql-toolbar .ql-picker.ql-expanded .ql-picker-label) {
-  background: var(--rte-accent-soft);
-}
-
-.rte-quill-root :deep(.ql-toolbar select) {
-  height: 32px;
-  min-width: 88px;
-  margin: 0 2px;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--rte-border) 80%, transparent);
-  background: #fff;
-  color: var(--rte-ink);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.rte-quill-root :deep(.ql-toolbar select:hover) {
-  border-color: color-mix(in srgb, var(--rte-accent) 40%, var(--rte-border));
-}
-
-.rte-quill-root :deep(.ql-snow .ql-stroke) {
-  stroke: var(--rte-ink-muted);
-}
-
-.rte-quill-root :deep(.ql-snow .ql-fill) {
-  fill: var(--rte-ink-muted);
-}
-
-.rte-quill-root :deep(.ql-toolbar button:hover .ql-stroke),
-.rte-quill-root :deep(.ql-toolbar button.ql-active .ql-stroke) {
-  stroke: var(--rte-accent);
-}
-
-.rte-quill-root :deep(.ql-toolbar button:hover .ql-fill),
-.rte-quill-root :deep(.ql-toolbar button.ql-active .ql-fill) {
-  fill: var(--rte-accent);
+  width: 100%;
+  max-width: 100%;
 }
 
 .rte-quill-root :deep(.ql-container.ql-snow) {
@@ -765,11 +889,18 @@ onUnmounted(() => {
 }
 
 .rte-html-pane {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 0 14px 14px;
 }
 
 .rte-code-shell {
   position: relative;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   border-radius: 12px;
   border: 1px solid var(--rte-border);
   background: #1e2428;
@@ -929,7 +1060,6 @@ onUnmounted(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .rte-mode-pill,
-  .rte-quill-root :deep(.ql-toolbar button),
   .image-uploader :deep(.el-upload),
   .image-overlay {
     transition: none;

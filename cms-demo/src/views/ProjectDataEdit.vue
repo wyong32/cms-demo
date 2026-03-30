@@ -293,35 +293,35 @@
         <div v-if="contentFields.length > 0" class="form-section">
           <h3>详细内容</h3>
           <el-row :gutter="20">
-            <div v-for="field in contentFields" :key="`content-${field.id}`">
-              <el-col :span="24">
-                <el-form-item 
-                  :label="getFieldLabel(field)" 
-                  :prop="`data.${field.fieldName}`"
-                  :required="field.isRequired"
-                >
-                  <RichTextEditor
-                    v-model="form.data[field.fieldName]"
-                    :placeholder="`请输入${getFieldLabel(field)}`"
-                    height="400px"
-                    :disabled="readonly"
-                    :project-info="{ id: projectId, name: projectName }"
-                    :category-info="form.categoryId ? categories.find(c => c.id === form.categoryId) || null : null"
-                    @imageInserted="handleRichTextImageInserted"
-                  />
-                </el-form-item>
-                
-                <!-- 原始HTML预览（调试用） -->
-                <el-form-item 
-                  v-if="form.data[field.fieldName]" 
-                  label="原始HTML预览（调试用）"
-                  class="html-preview-item"
-                >
-                  <div class="html-preview" v-html="form.data[field.fieldName]"></div>
-                  <el-text type="info" size="small">长度: {{ form.data[field.fieldName]?.length || 0 }} 字符</el-text>
-                </el-form-item>
-              </el-col>
-            </div>
+            <el-col v-for="field in contentFields" :key="`content-${field.id}`" :span="24">
+              <el-form-item
+                class="form-item-rich-text-full"
+                label-position="top"
+                :label="getFieldLabel(field)"
+                :prop="`data.${field.fieldName}`"
+                :required="field.isRequired"
+              >
+                <RichTextEditor
+                  v-model="form.data[field.fieldName]"
+                  :placeholder="`请输入${getFieldLabel(field)}`"
+                  height="400px"
+                  :disabled="readonly"
+                  :project-info="{ id: projectId, name: projectName }"
+                  :category-info="form.categoryId ? categories.find(c => c.id === form.categoryId) || null : null"
+                  @imageInserted="handleRichTextImageInserted"
+                />
+              </el-form-item>
+
+              <!-- 原始HTML预览（调试用） -->
+              <el-form-item
+                v-if="form.data[field.fieldName]"
+                label="原始HTML预览（调试用）"
+                class="html-preview-item"
+              >
+                <div class="html-preview" v-html="form.data[field.fieldName]"></div>
+                <el-text type="info" size="small">长度: {{ form.data[field.fieldName]?.length || 0 }} 字符</el-text>
+              </el-form-item>
+            </el-col>
           </el-row>
         </div>
         
@@ -998,6 +998,17 @@ onMounted(async () => {
   color: #303133;
   border-bottom: 2px solid #409eff;
   padding-bottom: 8px;
+}
+
+.form-item-rich-text-full {
+  width: 100%;
+  max-width: 100%;
+}
+
+.form-item-rich-text-full :deep(.el-form-item__content) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 /* 图片上传样式 */
