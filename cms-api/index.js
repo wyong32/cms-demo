@@ -19,6 +19,10 @@ import statsRoutes from './routes/stats.js';
 // 加载环境变量
 dotenv.config();
 
+if (!process.env.JWT_SECRET || String(process.env.JWT_SECRET).trim() === '') {
+  console.warn('⚠️  未配置 JWT_SECRET：登录接口将返回 500，请在 .env 中设置 JWT_SECRET');
+}
+
 // 创建Express应用
 const app = express();
 
@@ -35,18 +39,31 @@ const PORT = process.env.PORT || 3001;
 
 // 中间件配置
 app.use(helmet());
+// 本地开发常用 Origin（Vite 代理到线上 API 时，浏览器仍会带 localhost Origin，生产环境也需放行）
+const LOCAL_DEV_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000'
+];
+
 // CORS配置
 const corsOptions = {
   origin: function (origin, callback) {
-    // 允许的源列表
-    const allowedOrigins = process.env.NODE_ENV === 'production' 
-      ? (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['https://cms-demo-self.vercel.app'])
-      : ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000'];
-    
-    // 允许没有origin的请求（如移动应用）
+    const fromEnv = process.env.CORS_ORIGIN
+      ? process.env.CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
+    const prodDefaults = ['https://cms-demo-self.vercel.app'];
+
+    const allowedOrigins =
+      process.env.NODE_ENV === 'production'
+        ? [...new Set([...fromEnv, ...prodDefaults, ...LOCAL_DEV_ORIGINS])]
+        : [...LOCAL_DEV_ORIGINS];
+
+    // 允许没有origin的请求（如移动应用、同源代理、curl）
     if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
+
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -112,9 +129,15 @@ app.use((req, res) => {
 
 // 错误处理中间件
 app.use((error, req, res, next) => {
+  if (error.message === 'Not allowed by CORS') {
+    console.warn('CORS 拒绝来源:', req.get('Origin'));
+    return res.status(403).json({
+      error: '当前前端域名未被允许跨域访问 API，请在服务端配置 CORS_ORIGIN'
+    });
+  }
   console.error('服务器错误:', error);
-  res.status(500).json({ 
-    error: process.env.NODE_ENV === 'production' ? '服务器内部错误' : error.message 
+  res.status(500).json({
+    error: process.env.NODE_ENV === 'production' ? '服务器内部错误' : error.message
   });
 });
 

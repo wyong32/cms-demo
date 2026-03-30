@@ -5,6 +5,12 @@ import { authenticateToken, requireUser, validateRequired } from '../middleware/
 
 const router = express.Router();
 
+function normalizeHead(value) {
+  if (value === undefined || value === null) return null;
+  const s = String(value).trim();
+  return s === '' ? null : s;
+}
+
 // 获取项目数据列表
 router.get('/', authenticateToken, async (req, res) => {
   try {
@@ -97,6 +103,118 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// 以下具体路径必须注册在 /:id 之前，否则会被误匹配为 id（如 id=check-duplicate、含斜杠的路径）
+
+// 检查项目内标题是否重复
+router.get('/check-duplicate/:projectId/:title', authenticateToken, requireUser, async (req, res) => {
+  try {
+    const { projectId, title } = req.params;
+
+    if (!title || title.trim() === '') {
+      return res.status(400).json({ error: '标题不能为空' });
+    }
+
+    const existingProjectData = await prisma.cMSProjectData.findFirst({
+      where: {
+        projectId,
+        data: {
+          path: ['title'],
+          equals: title.trim()
+        }
+      },
+      select: {
+        id: true,
+        data: true,
+        createdAt: true,
+        creator: {
+          select: {
+            username: true
+          }
+        }
+      }
+    });
+
+    if (existingProjectData) {
+      return res.json({
+        isDuplicate: true,
+        existingData: {
+          id: existingProjectData.id,
+          title: existingProjectData.data.title,
+          creator: existingProjectData.creator?.username || '未知',
+          createdAt: existingProjectData.createdAt
+        }
+      });
+    }
+
+    res.json({ isDuplicate: false });
+  } catch (error) {
+    console.error('检查项目数据重复失败:', error);
+    res.status(500).json({ error: '检查项目数据重复失败' });
+  }
+});
+
+// 生成JS对象代码片段
+router.get('/:id/generate-code', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const projectData = await prisma.cMSProjectData.findUnique({
+      where: { id },
+      include: {
+        project: {
+          include: {
+            fields: {
+              orderBy: { order: 'asc' }
+            }
+          }
+        }
+      }
+    });
+
+    if (!projectData) {
+      return res.status(404).json({ error: '项目数据不存在' });
+    }
+
+    const data = projectData.data || {};
+    let jsCode = '{\n';
+
+    jsCode += `  id: "${projectData.id}",\n`;
+
+    const headVal =
+      projectData.head ??
+      (typeof data === 'object' && data !== null ? data._cmsHead : null);
+    if (headVal !== null && headVal !== undefined && String(headVal).trim() !== '') {
+      jsCode += `  head: ${JSON.stringify(String(headVal))},\n`;
+    }
+
+    for (const field of projectData.project.fields) {
+      const fieldName = field.fieldName;
+      const value = data[fieldName];
+
+      if (value !== undefined && value !== null) {
+        if (field.fieldType === 'ARRAY') {
+          const arrayValue = Array.isArray(value) ? value : [value];
+          jsCode += `  ${fieldName}: ${JSON.stringify(arrayValue)},\n`;
+        } else if (fieldName === 'detailsHtml') {
+          jsCode += `  ${fieldName}: \`${String(value).replace(/`/g, '\\`')}\`,\n`;
+        } else {
+          jsCode += `  ${fieldName}: "${String(value).replace(/"/g, '\\"')}",\n`;
+        }
+      }
+    }
+
+    jsCode += '}';
+
+    res.json({
+      projectData,
+      jsCode
+    });
+  } catch (error) {
+    console.error('生成JS代码失败:', error);
+    res.status(500).json({ error: '生成JS代码失败' });
+  }
+});
+
 // 获取单个项目数据
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
@@ -142,7 +260,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // 创建项目数据
 router.post('/', authenticateToken, requireUser, validateRequired(['projectId', 'data']), async (req, res) => {
   try {
-    const { projectId, categoryId, saveAsTemplate, data } = req.body;
+    const { projectId, categoryId, saveAsTemplate, data, head } = req.body;
 
     // 验证项目是否存在
     const project = await prisma.cMSProject.findUnique({
@@ -208,10 +326,16 @@ router.post('/', authenticateToken, requireUser, validateRequired(['projectId', 
       }
     });
 
+    const headNorm = normalizeHead(head);
+    if (headNorm !== null) {
+      cleanedData._cmsHead = headNorm;
+    }
+
     const projectData = await prisma.cMSProjectData.create({
       data: {
         projectId,
         categoryId: categoryId || null,
+        head: headNorm,
         data: cleanedData,
         createdBy: req.user.id
       },
@@ -361,6 +485,7 @@ router.post('/from-template', authenticateToken, requireUser, validateRequired([
       data: {
         projectId,
         categoryId: categoryId || template.categoryId,
+        head: null,
         data: projectData,
         createdBy: req.user.id
       },
@@ -412,7 +537,7 @@ router.post('/from-template', authenticateToken, requireUser, validateRequired([
 router.put('/:id', authenticateToken, requireUser, async (req, res) => {
   try {
     const { id } = req.params;
-    const { categoryId, data } = req.body;
+    const { categoryId, data, head } = req.body;
 
     // 检查项目数据是否存在
     const existingData = await prisma.cMSProjectData.findUnique({
@@ -431,6 +556,10 @@ router.put('/:id', authenticateToken, requireUser, async (req, res) => {
     }
 
     const updateData = {};
+
+    if (head !== undefined) {
+      updateData.head = normalizeHead(head);
+    }
     
     if (categoryId !== undefined) {
       if (categoryId) {
@@ -487,10 +616,38 @@ router.put('/:id', authenticateToken, requireUser, async (req, res) => {
         }
       });
 
+      if (head !== undefined) {
+        const hn = normalizeHead(head);
+        if (hn === null) {
+          delete cleanedData._cmsHead;
+        } else {
+          cleanedData._cmsHead = hn;
+        }
+      } else if (
+        existingData.data &&
+        typeof existingData.data === 'object' &&
+        existingData.data !== null &&
+        existingData.data._cmsHead !== undefined
+      ) {
+        cleanedData._cmsHead = existingData.data._cmsHead;
+      }
+
       updateData.data = cleanedData;
       
       // 🔧 修复业务逻辑：用户编辑数据时，自动重置为未完成状态
       updateData.isCompleted = false;
+    } else if (head !== undefined) {
+      const prev =
+        existingData.data && typeof existingData.data === 'object'
+          ? { ...existingData.data }
+          : {};
+      const hn = normalizeHead(head);
+      if (hn === null) {
+        delete prev._cmsHead;
+      } else {
+        prev._cmsHead = hn;
+      }
+      updateData.data = prev;
     }
 
     const updatedProjectData = await prisma.cMSProjectData.update({
@@ -648,113 +805,6 @@ router.delete('/:id', authenticateToken, requireUser, async (req, res) => {
   } catch (error) {
     console.error('删除项目数据失败:', error);
     res.status(500).json({ error: '删除项目数据失败' });
-  }
-});
-
-// 生成JS对象代码片段
-router.get('/:id/generate-code', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const projectData = await prisma.cMSProjectData.findUnique({
-      where: { id },
-      include: {
-        project: {
-          include: {
-            fields: {
-              orderBy: { order: 'asc' }
-            }
-          }
-        }
-      }
-    });
-
-    if (!projectData) {
-      return res.status(404).json({ error: '项目数据不存在' });
-    }
-
-    // 生成JS对象代码
-    const data = projectData.data;
-    let jsCode = '{\n';
-    
-    // 添加ID
-    jsCode += `  id: "${projectData.id}",\n`;
-    
-    // 按字段顺序添加数据
-    for (const field of projectData.project.fields) {
-      const fieldName = field.fieldName;
-      const value = data[fieldName];
-      
-      if (value !== undefined && value !== null) {
-        if (field.fieldType === 'ARRAY') {
-          const arrayValue = Array.isArray(value) ? value : [value];
-          jsCode += `  ${fieldName}: ${JSON.stringify(arrayValue)},\n`;
-        } else if (fieldName === 'detailsHtml') {
-          // 特殊处理HTML内容，使用模板字符串
-          jsCode += `  ${fieldName}: \`${String(value).replace(/`/g, '\\`')}\`,\n`;
-        } else {
-          jsCode += `  ${fieldName}: "${String(value).replace(/"/g, '\\"')}",\n`;
-        }
-      }
-    }
-    
-    jsCode += '}';
-
-    res.json({
-      projectData,
-      jsCode
-    });
-  } catch (error) {
-    console.error('生成JS代码失败:', error);
-    res.status(500).json({ error: '生成JS代码失败' });
-  }
-});
-
-// 检查项目内标题是否重复
-router.get('/check-duplicate/:projectId/:title', authenticateToken, requireUser, async (req, res) => {
-  try {
-    const { projectId, title } = req.params;
-    
-    if (!title || title.trim() === '') {
-      return res.status(400).json({ error: '标题不能为空' });
-    }
-    
-    const existingProjectData = await prisma.cMSProjectData.findFirst({
-      where: {
-        projectId,
-        data: {
-          path: ['title'],
-          equals: title.trim()
-        }
-      },
-      select: {
-        id: true,
-        data: true,
-        createdAt: true,
-        creator: {
-          select: {
-            username: true
-          }
-        }
-      }
-    });
-    
-    if (existingProjectData) {
-      return res.json({
-        isDuplicate: true,
-        existingData: {
-          id: existingProjectData.id,
-          title: existingProjectData.data.title,
-          creator: existingProjectData.creator?.username || '未知',
-          createdAt: existingProjectData.createdAt
-        }
-      });
-    }
-    
-    res.json({ isDuplicate: false });
-  } catch (error) {
-    console.error('检查项目数据重复失败:', error);
-    res.status(500).json({ error: '检查项目数据重复失败' });
   }
 });
 

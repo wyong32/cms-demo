@@ -3,16 +3,14 @@
  * 统一处理文件上传相关配置
  */
 
+import { getApiBaseURL } from './apiBase.js'
+
 /**
  * 获取上传地址
  * @returns {string} 上传API地址
  */
 export function getUploadAction() {
-  const baseURL = import.meta.env.VITE_API_URL || 
-    (import.meta.env.DEV 
-      ? 'http://localhost:3001/api' 
-      : 'https://cms-demo-api.vercel.app/api')
-  return `${baseURL}/upload/image`
+  return `${getApiBaseURL()}/upload/image`
 }
 
 /**

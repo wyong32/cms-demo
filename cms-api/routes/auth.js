@@ -112,7 +112,20 @@ router.post('/login', validateRequired(['username', 'password']), async (req, re
     });
   } catch (error) {
     console.error('用户登录失败:', error);
-    res.status(500).json({ error: '登录失败' });
+    let message = '登录失败';
+    if (error.message === 'JWT_SECRET is not configured' || error.message?.includes('JWT_SECRET')) {
+      message = '服务器未配置 JWT_SECRET，无法签发登录令牌（请检查环境变量）';
+    } else if (
+      error.code === 'P1001' ||
+      error.name === 'PrismaClientInitializationError' ||
+      /Can't reach database|数据库/.test(String(error.message))
+    ) {
+      message = '数据库不可用，请稍后重试或联系管理员';
+    }
+    res.status(500).json({
+      error: message,
+      ...(process.env.NODE_ENV !== 'production' && { detail: error.message })
+    });
   }
 });
 

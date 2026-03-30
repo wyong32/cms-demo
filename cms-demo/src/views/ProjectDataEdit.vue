@@ -55,6 +55,19 @@
               </el-form-item>
             </el-col>
           </el-row>
+
+          <el-row :gutter="20">
+            <el-col :span="24">
+              <el-form-item label="头部" prop="head">
+                <el-input
+                  v-model="form.head"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="可选。填写后可在「操作」页复制代码中出现字段 head"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
           
           <!-- 是否保存为模板（仅在新建模式显示） -->
           <el-row :gutter="20" v-if="!isEdit">
@@ -437,6 +450,7 @@ const templateCategoryId = computed(() => route.query.categoryId)
 const form = reactive({
   categoryId: '', // 分类ID
   saveAsTemplate: false, // 是否保存为模板（默认不勾选）
+  head: '', // 头部（库表字段 head，操作页生成代码用）
   data: {}
 })
 
@@ -718,6 +732,18 @@ const fetchProjectData = async (id) => {
     
     // 然后填充实际数据
     form.data = { ...form.data, ...projectData.data }
+    const raw = projectData.data
+    if (form.data._cmsHead !== undefined) {
+      delete form.data._cmsHead
+    }
+    const fromJson =
+      raw && typeof raw === 'object' && raw._cmsHead != null && String(raw._cmsHead).trim() !== ''
+        ? String(raw._cmsHead)
+        : ''
+    form.head =
+      projectData.head != null && String(projectData.head).trim() !== ''
+        ? String(projectData.head)
+        : fromJson
     
     // 设置分类ID（从项目数据中获取）
     form.categoryId = projectData.categoryId || ''
@@ -789,6 +815,7 @@ const handleSave = async () => {
       projectId: projectId.value,
       categoryId: categoryId || null, // 添加分类ID
       saveAsTemplate: form.saveAsTemplate, // 是否保存为模板
+      head: typeof form.head === 'string' ? form.head.trim() || null : null,
       data: form.data
     }
     
@@ -833,6 +860,7 @@ const handleReset = () => {
         form.data[field.fieldName] = ''
       }
     })
+    form.head = ''
     
     // 如果是从模板创建，重新加载模板数据
     if (templateId.value) {

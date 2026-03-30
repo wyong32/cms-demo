@@ -202,6 +202,7 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
         data: {
           projectId,
           categoryId: categoryId || null, // 添加分类ID
+          head: null,
           data: projectDataFields,
           isCompleted: false,
           createdBy: req.user.id

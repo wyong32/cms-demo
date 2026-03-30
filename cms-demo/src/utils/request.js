@@ -2,10 +2,11 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/counter.js'
 import { API_TIMEOUT } from '../constants'
+import { getApiBaseURL } from './apiBase.js'
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001/api' : 'https://cms-demo-api.vercel.app/api'),
+  baseURL: getApiBaseURL(),
   timeout: 30000, // 增加到30秒
   headers: {
     'Content-Type': 'application/json'

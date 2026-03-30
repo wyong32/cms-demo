@@ -1,16 +1,24 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (secret === undefined || secret === null || String(secret).trim() === '') {
+    throw new Error('JWT_SECRET is not configured');
+  }
+  return secret;
+}
+
 // JWT工具函数
 export const generateToken = (payload) => {
-  return jwt.sign(payload, process.env.JWT_SECRET, {
+  return jwt.sign(payload, getJwtSecret(), {
     expiresIn: '24h' // 24小时过期
   });
 };
 
 export const verifyToken = (token) => {
   try {
-    return jwt.verify(token, process.env.JWT_SECRET);
+    return jwt.verify(token, getJwtSecret());
   } catch (error) {
     throw new Error('Token无效或已过期');
   }

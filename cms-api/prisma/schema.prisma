@@ -136,6 +136,7 @@ model CMSProjectData {
   id          String   @id @default(cuid())
   projectId   String
   categoryId  String?
+  head        String?  @db.Text // 头部文案（操作页生成代码中的 head 字段）
   data        Json     // 存储实际的数据内容，根据项目字段配置动态存储
   isCompleted Boolean  @default(false) // 是否已完成
   createdAt   DateTime @default(now())
