@@ -11,6 +11,14 @@ function normalizeHead(value) {
   return s === '' ? null : s;
 }
 
+/** 生成 `...` 字面量内容：保留换行与原样，仅转义反引号、反斜杠、${ */
+function escapeForTemplateLiteral(str) {
+  return String(str)
+    .replace(/\\/g, '\\\\')
+    .replace(/`/g, '\\`')
+    .replace(/\$\{/g, '\\${');
+}
+
 /** Prisma/Postgres：代码已含 head 字段，但库表未加列时查询会 500 */
 function dbSchemaHint(error) {
   const msg = String(error?.message || error);
@@ -204,7 +212,8 @@ router.get('/:id/generate-code', authenticateToken, async (req, res) => {
       projectData.head ??
       (typeof data === 'object' && data !== null ? data._cmsHead : null);
     if (headVal !== null && headVal !== undefined && String(headVal).trim() !== '') {
-      jsCode += `  head: ${JSON.stringify(String(headVal))},\n`;
+      const headEscaped = escapeForTemplateLiteral(String(headVal));
+      jsCode += `  head: \`${headEscaped}\`,\n`;
     }
 
     for (const field of projectData.project.fields) {
