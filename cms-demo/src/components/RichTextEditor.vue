@@ -4,7 +4,7 @@
       <div class="rte-chrome-left">
         <span class="rte-eyebrow">内容编辑</span>
         <p class="rte-chrome-desc">
-          {{ viewMode === 'editor' ? '结构化正文 · 自动净化冗余属性' : '源码模式 · 样式原样保存' }}
+          {{ chromeDesc }}
         </p>
       </div>
       <div class="rte-mode-rail" role="tablist" aria-label="编辑模式">
@@ -18,6 +18,17 @@
         >
           <el-icon class="rte-mode-icon"><Edit /></el-icon>
           <span>可视化</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="rte-mode-pill"
+          :class="{ 'is-active': viewMode === 'markdown' }"
+          :aria-selected="viewMode === 'markdown'"
+          @click="switchMode('markdown')"
+        >
+          <el-icon class="rte-mode-icon"><Notebook /></el-icon>
+          <span>Markdown</span>
         </button>
         <button
           type="button"
@@ -121,6 +132,27 @@
       </div>
     </div>
 
+    <div v-else-if="viewMode === 'markdown'" class="rte-html-pane rte-md-pane">
+      <div class="rte-callout rte-callout--md">
+        <span class="rte-callout-dot rte-callout-dot--md" aria-hidden="true" />
+        <p class="rte-callout-text">
+          与当前 HTML 双向转换；保存到数据库的仍是 HTML。代码块、表格等超出可视化支持的内容可能在转换时被净化掉。
+        </p>
+      </div>
+      <div class="rte-code-shell rte-md-shell">
+        <div class="rte-code-label">MARKDOWN</div>
+        <el-input
+          v-model="markdownContent"
+          type="textarea"
+          :rows="20"
+          :disabled="disabled"
+          placeholder="# 标题&#10;&#10;段落与 **粗体**、[链接](https://)&#10;&#10;- 列表项"
+          class="rte-code-input rte-md-input"
+          @input="handleMarkdownChange"
+        />
+      </div>
+    </div>
+
     <div v-else class="rte-html-pane">
       <div class="rte-callout rte-callout--code">
         <span class="rte-callout-dot rte-callout-dot--code" aria-hidden="true" />
@@ -134,6 +166,7 @@
           v-model="htmlContent"
           type="textarea"
           :rows="20"
+          :disabled="disabled"
           placeholder="在此粘贴或编辑 HTML…"
           class="rte-code-input"
           @input="handleHtmlChange"
@@ -208,9 +241,20 @@
 import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import Quill from 'quill'
 import 'quill/dist/quill.snow.css'
-import { Edit, Document, Plus, Link as LinkIcon, Picture } from '@element-plus/icons-vue'
+import { Edit, Document, Plus, Link as LinkIcon, Picture, Notebook } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { marked } from 'marked'
+import TurndownService from 'turndown'
 import { getApiBaseURL } from '../utils/apiBase.js'
+
+marked.setOptions({ breaks: true, gfm: true })
+
+const turndown = new TurndownService({
+  headingStyle: 'atx',
+  bulletListMarker: '-',
+  codeBlockStyle: 'fenced',
+  emDelimiter: '*'
+})
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -229,7 +273,21 @@ let quillInstance = null
 
 const viewMode = ref('editor')
 const htmlContent = ref(props.modelValue || '')
+const markdownContent = ref('')
 const editorHeight = ref(props.height)
+
+const chromeDesc = computed(() => {
+  switch (viewMode.value) {
+    case 'editor':
+      return '结构化正文 · 自动净化冗余属性'
+    case 'markdown':
+      return 'Markdown 编辑 · 实时转为 HTML 写入数据'
+    case 'html':
+      return '源码模式 · 样式原样保存'
+    default:
+      return ''
+  }
+})
 
 /** 与 Quill 当前行格式同步 */
 const headerPick = ref('p')
@@ -336,6 +394,29 @@ function prettifyHtml(html) {
 
 function processVisualOutput(rawHtml) {
   return prettifyHtml(sanitizeVisualHtml(rawHtml))
+}
+
+function htmlToMarkdown(html) {
+  if (!html || !String(html).trim()) return ''
+  try {
+    return turndown.turndown(html).trimEnd()
+  } catch (e) {
+    console.warn('HTML 转 Markdown 失败:', e)
+    return ''
+  }
+}
+
+/** Markdown → 与可视化一致的净化 HTML */
+function markdownToVisualHtml(md) {
+  const raw = String(md || '').trim()
+  if (!raw) return ''
+  try {
+    const parsed = marked.parse(raw, { async: false })
+    return processVisualOutput(typeof parsed === 'string' ? parsed : '')
+  } catch (e) {
+    console.warn('Markdown 解析失败:', e)
+    return ''
+  }
 }
 
 function syncToolbarFromEditor() {
@@ -491,6 +572,7 @@ const initQuill = async () => {
   if (!quillContainer.value || viewMode.value !== 'editor') return
 
   try {
+    quillContainer.value.innerHTML = ''
     quillInstance = new Quill(quillContainer.value, quillOptions)
 
     const initial = htmlContent.value || ''
@@ -525,15 +607,29 @@ const initQuill = async () => {
 const switchMode = (mode) => {
   if (mode === viewMode.value) return
 
-  if (viewMode.value === 'editor' && quillInstance) {
+  const prev = viewMode.value
+
+  if (prev === 'editor' && quillInstance) {
     const raw = quillInstance.root.innerHTML
     htmlContent.value = processVisualOutput(raw)
     emit('update:modelValue', htmlContent.value)
     emit('change', htmlContent.value)
     quillInstance = null
+    if (quillContainer.value) quillContainer.value.innerHTML = ''
+  }
+
+  if (prev === 'markdown') {
+    const nextHtml = markdownToVisualHtml(markdownContent.value)
+    htmlContent.value = nextHtml
+    emit('update:modelValue', nextHtml)
+    emit('change', nextHtml)
   }
 
   viewMode.value = mode
+
+  if (mode === 'markdown') {
+    markdownContent.value = htmlToMarkdown(htmlContent.value || '')
+  }
 
   if (mode === 'editor') {
     nextTick(() => {
@@ -547,6 +643,14 @@ const handleHtmlChange = (value) => {
   markUserEditing()
   emit('update:modelValue', value)
   emit('change', value)
+}
+
+const handleMarkdownChange = () => {
+  markUserEditing()
+  const nextHtml = markdownToVisualHtml(markdownContent.value)
+  htmlContent.value = nextHtml
+  emit('update:modelValue', nextHtml)
+  emit('change', nextHtml)
 }
 
 watch(
@@ -563,6 +667,9 @@ watch(
     const v = newValue || ''
     if (v === htmlContent.value) return
     htmlContent.value = v
+    if (viewMode.value === 'markdown' && !isUserEditing.value) {
+      markdownContent.value = htmlToMarkdown(v)
+    }
     if (quillInstance && viewMode.value === 'editor' && !isUserEditing.value) {
       try {
         const selection = quillInstance.getSelection()
@@ -721,6 +828,11 @@ onUnmounted(() => {
   background: color-mix(in srgb, #6b5c4c 8%, white);
 }
 
+.rte-callout--md {
+  border-color: color-mix(in srgb, #3d5a80 24%, transparent);
+  background: color-mix(in srgb, #3d5a80 10%, white);
+}
+
 .rte-callout-dot {
   flex-shrink: 0;
   width: 8px;
@@ -734,6 +846,11 @@ onUnmounted(() => {
 .rte-callout-dot--code {
   background: #6b5c4c;
   box-shadow: 0 0 0 3px color-mix(in srgb, #6b5c4c 20%, transparent);
+}
+
+.rte-callout-dot--md {
+  background: #3d5a80;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #3d5a80 22%, transparent);
 }
 
 .rte-callout-text {
@@ -949,6 +1066,18 @@ onUnmounted(() => {
 
 .rte-code-input :deep(.el-textarea__inner)::placeholder {
   color: rgb(232 228 220 / 0.35);
+}
+
+.rte-md-shell {
+  background: #1a2330;
+}
+
+.rte-md-input :deep(.el-textarea__inner) {
+  color: #dce7f0;
+}
+
+.rte-md-input :deep(.el-textarea__inner)::placeholder {
+  color: rgb(220 231 240 / 0.38);
 }
 
 .image-uploader {
