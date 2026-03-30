@@ -48,7 +48,7 @@
       <div class="rte-callout rte-callout--visual">
         <span class="rte-callout-dot" aria-hidden="true" />
         <p class="rte-callout-text">
-          标题、段落、链接、图片、列表；保存为语义化 HTML。复杂样式请切到「HTML」。
+          标题、段落、链接、图片、列表、表格；HTML 模式粘贴的表格会尽量还原。复杂样式请切到「HTML」。
         </p>
       </div>
       <div class="rte-canvas">
@@ -128,6 +128,45 @@
                 </el-button>
               </div>
             </div>
+
+            <div class="rte-op-cell rte-op-cell--table">
+              <span class="rte-op-label">表格</span>
+              <p class="rte-op-desc">光标处插入表格；在单元格内时可增删行列或整表</p>
+              <el-button
+                type="primary"
+                plain
+                class="rte-op-btn"
+                :disabled="disabled"
+                @mousedown.prevent
+                @click="openTableDialog"
+              >
+                <el-icon><Grid /></el-icon>
+                插入表格
+              </el-button>
+              <div v-if="tableUi.inTable" class="rte-table-ops">
+                <el-button size="small" :disabled="disabled" @mousedown.prevent @click="runTableCommand('insertRowAbove')">
+                  上方插行
+                </el-button>
+                <el-button size="small" :disabled="disabled" @mousedown.prevent @click="runTableCommand('insertRowBelow')">
+                  下方插行
+                </el-button>
+                <el-button size="small" :disabled="disabled" @mousedown.prevent @click="runTableCommand('insertColumnLeft')">
+                  左侧插列
+                </el-button>
+                <el-button size="small" :disabled="disabled" @mousedown.prevent @click="runTableCommand('insertColumnRight')">
+                  右侧插列
+                </el-button>
+                <el-button size="small" type="warning" plain :disabled="disabled" @mousedown.prevent @click="runTableCommand('deleteRow')">
+                  删行
+                </el-button>
+                <el-button size="small" type="warning" plain :disabled="disabled" @mousedown.prevent @click="runTableCommand('deleteColumn')">
+                  删列
+                </el-button>
+                <el-button size="small" type="danger" plain :disabled="disabled" @mousedown.prevent @click="runTableCommand('deleteTable')">
+                  删表格
+                </el-button>
+              </div>
+            </div>
           </div>
         </div>
         <div ref="quillContainer" class="rte-quill-root" :style="{ minHeight: editorHeight }"></div>
@@ -138,7 +177,7 @@
       <div class="rte-callout rte-callout--md">
         <span class="rte-callout-dot rte-callout-dot--md" aria-hidden="true" />
         <p class="rte-callout-text">
-          与当前 HTML 双向转换；保存到数据库的仍是 HTML。代码块、表格等超出可视化支持的内容可能在转换时被净化掉。
+          与当前 HTML 双向转换；保存到数据库的仍是 HTML。可视化已支持表格；Markdown 侧表格语法可能无法完整回传。
         </p>
       </div>
       <div class="rte-code-shell rte-md-shell">
@@ -175,6 +214,21 @@
         />
       </div>
     </div>
+
+    <el-dialog v-model="tableDialogVisible" title="插入表格" width="420px" destroy-on-close append-to-body>
+      <el-form label-width="72px" @submit.prevent>
+        <el-form-item label="行数">
+          <el-input-number v-model="tableInsertForm.rows" :min="1" :max="20" controls-position="right" />
+        </el-form-item>
+        <el-form-item label="列数">
+          <el-input-number v-model="tableInsertForm.cols" :min="1" :max="12" controls-position="right" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="tableDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmInsertTable">插入</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog
       v-model="imageDialogVisible"
@@ -242,8 +296,11 @@
 <script setup>
 import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import Quill from 'quill'
+import Table from 'quill/modules/table.js'
 import 'quill/dist/quill.snow.css'
-import { Edit, Document, Plus, Link as LinkIcon, Picture, Notebook } from '@element-plus/icons-vue'
+import { Edit, Document, Plus, Link as LinkIcon, Picture, Notebook, Grid } from '@element-plus/icons-vue'
+
+Table.register()
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { marked } from 'marked'
 import TurndownService from 'turndown'
@@ -295,6 +352,10 @@ const chromeDesc = computed(() => {
 const headerPick = ref('p')
 const listActive = ref(null)
 
+const tableDialogVisible = ref(false)
+const tableInsertForm = ref({ rows: 3, cols: 3 })
+const tableUi = ref({ inTable: false })
+
 const imageDialogVisible = ref(false)
 const imageInserting = ref(false)
 const imageFormRef = ref()
@@ -323,7 +384,65 @@ const markUserEditing = () => {
 
 let savedSelection = null
 
-const ALLOWED_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'a', 'img', 'ul', 'ol', 'li', 'br'])
+const ALLOWED_TAGS = new Set([
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'p',
+  'a',
+  'img',
+  'ul',
+  'ol',
+  'li',
+  'br',
+  'table',
+  'tbody',
+  'thead',
+  'tfoot',
+  'tr',
+  'td',
+  'th'
+])
+
+function randomRowId() {
+  return `row-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** 将常见 HTML 表格整理为 Quill 可识别的结构（TBODY、TD、每行 data-row） */
+function normalizeHtmlTablesForQuill(html) {
+  if (!html || !html.toLowerCase().includes('<table')) return html
+  const wrap = document.createElement('div')
+  wrap.innerHTML = html
+
+  wrap.querySelectorAll('table').forEach((table) => {
+    const rows = Array.from(table.rows)
+    if (rows.length === 0) return
+
+    const tbody = document.createElement('tbody')
+    rows.forEach((tr) => tbody.appendChild(tr))
+    while (table.firstChild) table.removeChild(table.firstChild)
+    table.appendChild(tbody)
+
+    tbody.querySelectorAll('tr').forEach((tr) => {
+      const rowId = randomRowId()
+      tr.querySelectorAll('td, th').forEach((cell) => {
+        let el = cell
+        if (el.tagName === 'TH') {
+          const td = document.createElement('td')
+          td.innerHTML = el.innerHTML
+          el.replaceWith(td)
+          el = td
+        }
+        if (!el.getAttribute('data-row')) el.setAttribute('data-row', rowId)
+      })
+    })
+  })
+
+  return wrap.innerHTML
+}
 
 /**
  * 可视化模式产出：只保留语义标签；去掉 class、style、data-* 等（链接 href、图片 src/alt/width 除外）
@@ -349,6 +468,18 @@ function sanitizeVisualHtml(html) {
       if (!w && el.style?.width) w = el.style.width
       if (w) keep.width = w
     }
+    if (tag === 'td' || tag === 'th') {
+      const dr = el.getAttribute('data-row')
+      if (dr) keep['data-row'] = dr
+      const cs = el.getAttribute('colspan')
+      const rs = el.getAttribute('rowspan')
+      if (cs && /^\d+$/.test(cs)) keep.colspan = cs
+      if (rs && /^\d+$/.test(rs)) keep.rowspan = rs
+    }
+    if (tag === 'table') {
+      const b = el.getAttribute('border')
+      if (b && /^\d+$/.test(b)) keep.border = b
+    }
     while (el.attributes.length > 0) {
       el.removeAttribute(el.attributes[0].name)
     }
@@ -373,6 +504,7 @@ function sanitizeVisualHtml(html) {
   }
 
   wrap.querySelectorAll('p').forEach((p) => {
+    if (p.closest('td, th')) return
     if (!p.textContent.trim() && !p.querySelector('img') && !p.querySelector('br')) {
       p.remove()
     }
@@ -387,7 +519,10 @@ function sanitizeVisualHtml(html) {
 function prettifyHtml(html) {
   if (!html || !html.trim()) return ''
   let s = html.trim()
-  s = s.replace(/(<\/?(?:p|h[1-6]|ul|ol|li)(?:\s[^>]*)?>)/gi, '\n$1')
+  s = s.replace(
+    /(<\/?(?:p|h[1-6]|ul|ol|li|table|tbody|thead|tfoot|tr|td|th)(?:\s[^>]*)?>)/gi,
+    '\n$1'
+  )
   s = s.replace(/<br\s*\/?>/gi, '<br>\n')
   s = s.replace(/^\s+/, '').replace(/\n{3,}/g, '\n\n')
   if (!s.endsWith('\n')) s += '\n'
@@ -421,13 +556,31 @@ function markdownToVisualHtml(md) {
   }
 }
 
+function refreshTableUi() {
+  if (!quillInstance) {
+    tableUi.value = { inTable: false }
+    return
+  }
+  const mod = quillInstance.getModule('table')
+  if (!mod || typeof mod.getTable !== 'function') {
+    tableUi.value = { inTable: false }
+    return
+  }
+  const [tbl, row, cell] = mod.getTable()
+  tableUi.value = { inTable: !!(tbl && row && cell) }
+}
+
 function syncToolbarFromEditor() {
   if (!quillInstance) return
   const range = quillInstance.getSelection()
-  if (!range) return
+  if (!range) {
+    refreshTableUi()
+    return
+  }
   const fmt = quillInstance.getFormat(range)
   headerPick.value = fmt.header ? String(fmt.header) : 'p'
   listActive.value = fmt.list === 'bullet' || fmt.list === 'ordered' ? fmt.list : null
+  refreshTableUi()
 }
 
 function applyHeaderLevel(val) {
@@ -485,6 +638,43 @@ async function openInsertLink() {
   } catch {
     /* 取消 */
   }
+}
+
+function openTableDialog() {
+  if (!quillInstance || props.disabled) return
+  tableInsertForm.value = { rows: 3, cols: 3 }
+  tableDialogVisible.value = true
+}
+
+function confirmInsertTable() {
+  if (!quillInstance) return
+  const mod = quillInstance.getModule('table')
+  if (!mod) return
+  const r = Math.min(20, Math.max(1, tableInsertForm.value.rows || 3))
+  const c = Math.min(12, Math.max(1, tableInsertForm.value.cols || 3))
+  quillInstance.focus()
+  mod.insertTable(r, c)
+  tableDialogVisible.value = false
+  nextTick(() => refreshTableUi())
+}
+
+function runTableCommand(name) {
+  if (!quillInstance || props.disabled) return
+  const mod = quillInstance.getModule('table')
+  if (!mod) return
+  quillInstance.focus()
+  const map = {
+    insertRowAbove: () => mod.insertRowAbove(),
+    insertRowBelow: () => mod.insertRowBelow(),
+    insertColumnLeft: () => mod.insertColumnLeft(),
+    insertColumnRight: () => mod.insertColumnRight(),
+    deleteRow: () => mod.deleteRow(),
+    deleteColumn: () => mod.deleteColumn(),
+    deleteTable: () => mod.deleteTable()
+  }
+  const fn = map[name]
+  if (fn) fn()
+  nextTick(() => refreshTableUi())
 }
 
 const showImageDialog = () => {
@@ -576,9 +766,10 @@ const quillOptions = {
   theme: 'snow',
   placeholder: props.placeholder,
   readOnly: props.disabled,
-  formats: ['header', 'list', 'link', 'image'],
+  formats: ['header', 'list', 'link', 'image', 'table'],
   modules: {
-    toolbar: false
+    toolbar: false,
+    table: true
   }
 }
 
@@ -591,10 +782,11 @@ const initQuill = async () => {
 
     const initial = htmlContent.value || ''
     if (initial.trim()) {
+      const toPaste = normalizeHtmlTablesForQuill(initial)
       try {
-        quillInstance.clipboard.dangerouslyPasteHTML(initial)
+        quillInstance.clipboard.dangerouslyPasteHTML(toPaste)
       } catch {
-        quillInstance.root.innerHTML = initial
+        quillInstance.root.innerHTML = toPaste
       }
     }
 
@@ -609,6 +801,7 @@ const initQuill = async () => {
 
     quillInstance.on('selection-change', (range) => {
       if (range && quillInstance) syncToolbarFromEditor()
+      else if (!range) refreshTableUi()
     })
 
     await nextTick()
@@ -687,7 +880,7 @@ watch(
     if (quillInstance && viewMode.value === 'editor' && !isUserEditing.value) {
       try {
         const selection = quillInstance.getSelection()
-        quillInstance.clipboard.dangerouslyPasteHTML(v)
+        quillInstance.clipboard.dangerouslyPasteHTML(normalizeHtmlTablesForQuill(v))
         if (selection) {
           setTimeout(() => {
             try {
@@ -899,7 +1092,7 @@ onUnmounted(() => {
 
 .rte-op-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 16px;
   width: 100%;
   align-items: start;
@@ -953,16 +1146,19 @@ onUnmounted(() => {
   width: 100%;
 }
 
-@media (max-width: 1200px) {
-  .rte-op-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.rte-table-ops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed color-mix(in srgb, var(--rte-border) 80%, transparent);
 }
 
-@media (max-width: 640px) {
-  .rte-op-grid {
-    grid-template-columns: 1fr;
-  }
+.rte-table-ops .el-button {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .rte-quill-root {
@@ -1017,6 +1213,30 @@ onUnmounted(() => {
   color: var(--rte-accent);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
+}
+
+.rte-quill-root :deep(.ql-editor table) {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  margin: 0.75em 0;
+  font-size: 14px;
+  border: 1px solid color-mix(in srgb, var(--rte-border) 90%, var(--rte-ink));
+}
+
+.rte-quill-root :deep(.ql-editor td),
+.rte-quill-root :deep(.ql-editor th) {
+  border: 1px solid color-mix(in srgb, var(--rte-border) 90%, var(--rte-ink));
+  padding: 8px 10px;
+  vertical-align: top;
+  min-width: 2.5em;
+  word-break: break-word;
+}
+
+.rte-quill-root :deep(.ql-editor td p),
+.rte-quill-root :deep(.ql-editor th p) {
+  margin: 0.15em 0;
 }
 
 .rte-html-pane {
