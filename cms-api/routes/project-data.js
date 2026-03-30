@@ -11,6 +11,22 @@ function normalizeHead(value) {
   return s === '' ? null : s;
 }
 
+/** Prisma/Postgres：代码已含 head 字段，但库表未加列时查询会 500 */
+function dbSchemaHint(error) {
+  const msg = String(error?.message || error);
+  if (/`head`|column.*head|head.*does not exist|cms_project_data.*42703/i.test(msg)) {
+    return {
+      hint: '请在正式库为 cms_project_data 增加 head 列：执行 cms-api/prisma/migrations/add_project_data_head.sql，或设置 DATABASE_URL 后运行 npx prisma db push'
+    };
+  }
+  if (/does not exist|42703|P2022|no such column/i.test(msg)) {
+    return {
+      hint: '数据库结构与 Prisma schema 不一致，请对正式库执行迁移'
+    };
+  }
+  return {};
+}
+
 // 获取项目数据列表
 router.get('/', authenticateToken, async (req, res) => {
   try {
@@ -99,7 +115,11 @@ router.get('/', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('获取项目数据列表失败:', error);
-    res.status(500).json({ error: '获取项目数据列表失败' });
+    res.status(500).json({
+      error: '获取项目数据列表失败',
+      ...dbSchemaHint(error),
+      ...(process.env.NODE_ENV !== 'production' && { detail: error.message })
+    });
   }
 });
 
@@ -253,7 +273,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
     res.json({ projectData });
   } catch (error) {
     console.error('获取项目数据失败:', error);
-    res.status(500).json({ error: '获取项目数据失败' });
+    res.status(500).json({
+      error: '获取项目数据失败',
+      ...dbSchemaHint(error),
+      ...(process.env.NODE_ENV !== 'production' && { detail: error.message })
+    });
   }
 });
 
