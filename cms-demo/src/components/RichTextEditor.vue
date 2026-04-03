@@ -48,7 +48,7 @@
       <div class="rte-callout rte-callout--visual">
         <span class="rte-callout-dot" aria-hidden="true" />
         <p class="rte-callout-text">
-          标题、段落、链接、图片、列表、表格；HTML 模式粘贴的表格会尽量还原。复杂样式请切到「HTML」。
+          标题、段落、链接、图片、iframe 嵌入、列表、表格；HTML 模式粘贴的表格与 iframe 会尽量还原。复杂样式请切到「HTML」。
         </p>
       </div>
       <div class="rte-canvas">
@@ -103,6 +103,22 @@
               >
                 <el-icon><Picture /></el-icon>
                 插入图片
+              </el-button>
+            </div>
+
+            <div class="rte-op-cell rte-op-cell--iframe">
+              <span class="rte-op-label">插入 iframe</span>
+              <p class="rte-op-desc">在光标处嵌入网页（如 YouTube：https://www.youtube.com/embed/视频ID）</p>
+              <el-button
+                type="primary"
+                plain
+                class="rte-op-btn"
+                :disabled="disabled"
+                @mousedown.prevent
+                @click="openInsertIframe"
+              >
+                <el-icon><VideoPlay /></el-icon>
+                插入 iframe
               </el-button>
             </div>
 
@@ -298,7 +314,16 @@ import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import Quill from 'quill'
 import Table from 'quill/modules/table.js'
 import 'quill/dist/quill.snow.css'
-import { Edit, Document, Plus, Link as LinkIcon, Picture, Notebook, Grid } from '@element-plus/icons-vue'
+import {
+  Edit,
+  Document,
+  Plus,
+  Link as LinkIcon,
+  Picture,
+  Notebook,
+  Grid,
+  VideoPlay
+} from '@element-plus/icons-vue'
 
 Table.register()
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -404,7 +429,8 @@ const ALLOWED_TAGS = new Set([
   'tfoot',
   'tr',
   'td',
-  'th'
+  'th',
+  'iframe'
 ])
 
 function randomRowId() {
@@ -444,6 +470,23 @@ function normalizeHtmlTablesForQuill(html) {
   return wrap.innerHTML
 }
 
+/** 为 HTML 中的 iframe 补齐 Quill 视频嵌入所需的 class 与安全属性 */
+function normalizeIframesForQuill(html) {
+  if (!html || !html.toLowerCase().includes('<iframe')) return html
+  const wrap = document.createElement('div')
+  wrap.innerHTML = html
+  wrap.querySelectorAll('iframe').forEach((el) => {
+    if (!el.classList.contains('ql-video')) el.classList.add('ql-video')
+    if (!el.hasAttribute('frameborder')) el.setAttribute('frameborder', '0')
+    if (!el.hasAttribute('allowfullscreen')) el.setAttribute('allowfullscreen', 'true')
+  })
+  return wrap.innerHTML
+}
+
+function prepareHtmlForQuillPaste(html) {
+  return normalizeIframesForQuill(normalizeHtmlTablesForQuill(html || ''))
+}
+
 /**
  * 可视化模式产出：只保留语义标签；去掉 class、style、data-* 等（链接 href、图片 src/alt/width 除外）
  */
@@ -480,10 +523,29 @@ function sanitizeVisualHtml(html) {
       const b = el.getAttribute('border')
       if (b && /^\d+$/.test(b)) keep.border = b
     }
+    if (tag === 'iframe') {
+      const src = el.getAttribute('src')
+      if (src && src.trim()) {
+        keep.src = src.trim()
+        keep.class = 'ql-video'
+        const w = el.getAttribute('width')
+        const h = el.getAttribute('height')
+        if (w) keep.width = w
+        if (h) keep.height = h
+      }
+    }
     while (el.attributes.length > 0) {
       el.removeAttribute(el.attributes[0].name)
     }
     Object.entries(keep).forEach(([k, v]) => el.setAttribute(k, v))
+    if (tag === 'iframe' && keep.src) {
+      el.setAttribute('allowfullscreen', 'true')
+      el.setAttribute('frameborder', '0')
+    }
+  })
+
+  wrap.querySelectorAll('iframe').forEach((el) => {
+    if (!el.getAttribute('src')?.trim()) el.remove()
   })
 
   let changed = true
@@ -520,7 +582,7 @@ function prettifyHtml(html) {
   if (!html || !html.trim()) return ''
   let s = html.trim()
   s = s.replace(
-    /(<\/?(?:p|h[1-6]|ul|ol|li|table|tbody|thead|tfoot|tr|td|th)(?:\s[^>]*)?>)/gi,
+    /(<\/?(?:p|h[1-6]|ul|ol|li|table|tbody|thead|tfoot|tr|td|th|iframe)(?:\s[^>]*)?>)/gi,
     '\n$1'
   )
   s = s.replace(/<br\s*\/?>/gi, '<br>\n')
@@ -677,6 +739,41 @@ function runTableCommand(name) {
   nextTick(() => refreshTableUi())
 }
 
+async function openInsertIframe() {
+  if (!quillInstance || props.disabled) return
+  const range = quillInstance.getSelection(true)
+  const insertIndex =
+    range && range.index != null
+      ? range.index
+      : Math.max(0, quillInstance.getLength() - 1)
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '填写可嵌入的 https 地址（与 Quill 一致，仅允许 http / https 等安全协议）',
+      '插入 iframe',
+      {
+        confirmButtonText: '插入',
+        cancelButtonText: '取消',
+        inputPlaceholder: 'https://www.youtube.com/embed/xxxxxxxxxxx',
+        inputValidator: (v) => {
+          if (!v || !String(v).trim()) return '请输入地址'
+          return true
+        }
+      }
+    )
+    const url = String(value).trim()
+    quillInstance.focus()
+    await nextTick()
+    const end = Math.max(0, quillInstance.getLength() - 1)
+    const idx = Math.min(Math.max(0, insertIndex), end)
+    quillInstance.setSelection(idx, 0)
+    await nextTick()
+    quillInstance.insertEmbed(idx, 'video', url)
+    ElMessage.success('已插入 iframe')
+  } catch {
+    /* 取消 */
+  }
+}
+
 const showImageDialog = () => {
   if (!quillInstance || props.disabled) return
   savedSelection = quillInstance.getSelection()
@@ -766,7 +863,7 @@ const quillOptions = {
   theme: 'snow',
   placeholder: props.placeholder,
   readOnly: props.disabled,
-  formats: ['header', 'list', 'link', 'image', 'table'],
+  formats: ['header', 'list', 'link', 'image', 'video', 'table'],
   modules: {
     toolbar: false,
     table: true
@@ -782,7 +879,7 @@ const initQuill = async () => {
 
     const initial = htmlContent.value || ''
     if (initial.trim()) {
-      const toPaste = normalizeHtmlTablesForQuill(initial)
+      const toPaste = prepareHtmlForQuillPaste(initial)
       try {
         quillInstance.clipboard.dangerouslyPasteHTML(toPaste)
       } catch {
@@ -880,7 +977,7 @@ watch(
     if (quillInstance && viewMode.value === 'editor' && !isUserEditing.value) {
       try {
         const selection = quillInstance.getSelection()
-        quillInstance.clipboard.dangerouslyPasteHTML(normalizeHtmlTablesForQuill(v))
+        quillInstance.clipboard.dangerouslyPasteHTML(prepareHtmlForQuillPaste(v))
         if (selection) {
           setTimeout(() => {
             try {
@@ -1237,6 +1334,18 @@ onUnmounted(() => {
 .rte-quill-root :deep(.ql-editor td p),
 .rte-quill-root :deep(.ql-editor th p) {
   margin: 0.15em 0;
+}
+
+.rte-quill-root :deep(.ql-editor .ql-video) {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-height: 200px;
+  aspect-ratio: 16 / 9;
+  margin: 0.75em 0;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--rte-ink) 6%, transparent);
 }
 
 .rte-html-pane {

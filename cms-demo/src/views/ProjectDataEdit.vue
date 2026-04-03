@@ -170,6 +170,11 @@
                       预览
                     </el-button>
                   </div>
+                  <el-text type="info" size="small" class="iframe-url-tip">
+                    YouTube 视频请使用嵌入地址，前缀为
+                    <span>https://www.youtube.com/embed/</span>
+                    ，后接视频 ID。
+                  </el-text>
                 </el-form-item>
               </el-col>
               
@@ -1080,6 +1085,16 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   width: 100%;
+}
+
+.iframe-url-tip {
+  display: block;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.iframe-url-tip a {
+  word-break: break-all;
 }
 
 .preview-dialog :deep(.el-dialog__body) {
