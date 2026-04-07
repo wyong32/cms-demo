@@ -199,6 +199,91 @@ class AIService {
     }
   }
 
+  /** 去掉首尾 markdown 代码块（勿用非贪婪 ``` 正则，避免 detailsHtml 内反引号导致整段被截断） */
+  _stripMarkdownFences(s) {
+    let t = String(s || '').trim();
+    t = t.replace(/^\s*```(?:json)?\s*\r?\n?/i, '');
+    t = t.replace(/\r?\n```\s*$/,'');
+    return t.trim();
+  }
+
+  /** 从首个 { 起扫描括号深度，截取完整顶层 JSON 对象（字符串内的 { } 不计入深度） */
+  _extractBalancedJsonObject(s) {
+    const start = s.indexOf('{');
+    if (start === -1) return null;
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (let i = start; i < s.length; i++) {
+      const c = s[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (c === '\\') esc = true;
+        else if (c === '"') inStr = false;
+      } else {
+        if (c === '"') inStr = true;
+        else if (c === '{') depth++;
+        else if (c === '}') {
+          depth--;
+          if (depth === 0) return s.slice(start, i + 1);
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 解析 Gemini 文本输出为 JSON 对象
+   */
+  _parseGeminiJsonText(rawText) {
+    const raw = String(rawText || '').trim();
+    const work = this._stripMarkdownFences(raw);
+
+    const tryParse = (str) => {
+      try {
+        const o = JSON.parse(str);
+        return o && typeof o === 'object' ? o : null;
+      } catch {
+        return null;
+      }
+    };
+
+    let parsed = tryParse(work);
+    if (parsed) return parsed;
+
+    const balanced = this._extractBalancedJsonObject(work);
+    if (balanced) {
+      parsed = tryParse(balanced);
+      if (parsed) return parsed;
+    }
+
+    const start = work.indexOf('{');
+    const end = work.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      parsed = tryParse(work.slice(start, end + 1));
+      if (parsed) return parsed;
+    }
+
+    let lastErr = 'parse failed';
+    try {
+      JSON.parse(work);
+    } catch (e) {
+      lastErr = e.message || String(e);
+    }
+
+    const pe = new Error(`模型返回内容无法解析为 JSON：${lastErr}`);
+    pe.code = 'AI_JSON_PARSE_ERROR';
+    pe.details = {
+      provider: 'gemini',
+      model: this.geminiModel,
+      responsePreview: raw.slice(0, 1500),
+      hint:
+        '常见于：① detailsHtml 内未转义的双引号/断行导致非法 JSON；② 输出过长被截断。已提高 maxOutputTokens；提示词中已要求合法 JSON 字符串。'
+    };
+    console.error('[AI] JSON 解析失败', pe.details);
+    throw pe;
+  }
+
   // Gemini实现（无 mock / 无静默降级）
   async generateWithGemini({ title, description, imageUrl, iframeUrl, options, categoryInfo }) {
     if (!this.client) {
@@ -212,56 +297,20 @@ class AIService {
     }
 
     try {
-      const model = this.client.getGenerativeModel({ model: this.geminiModel });
+      const model = this.client.getGenerativeModel({
+        model: this.geminiModel,
+        generationConfig: {
+          maxOutputTokens: 8192,
+          temperature: 0.35,
+        },
+      });
       const prompt = this.buildGeminiPrompt({ title, description, imageUrl, iframeUrl, options, categoryInfo });
 
       const result = await model.generateContent(prompt);
       const response = await result.response;
       const text = response.text();
 
-      let jsonText = String(text || '').trim();
-
-      if (jsonText.includes('```json')) {
-        const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/);
-        if (jsonMatch) jsonText = jsonMatch[1].trim();
-      } else if (jsonText.includes('```')) {
-        const codeMatch = jsonText.match(/```\s*([\s\S]*?)\s*```/);
-        if (codeMatch) jsonText = codeMatch[1].trim();
-      }
-
-      let content;
-      try {
-        content = JSON.parse(jsonText);
-      } catch (firstParse) {
-        const start = jsonText.indexOf('{');
-        const end = jsonText.lastIndexOf('}');
-        if (start === -1 || end <= start) {
-          const pe = new Error(
-            `模型返回内容无法解析为 JSON：${firstParse.message}。请检查提示词或换用 GEMINI_MODEL`
-          );
-          pe.code = 'AI_JSON_PARSE_ERROR';
-          pe.details = {
-            provider: 'gemini',
-            model: this.geminiModel,
-            responsePreview: String(text || '').slice(0, 1200)
-          };
-          console.error('[AI] JSON 解析失败', pe.details);
-          throw pe;
-        }
-        try {
-          content = JSON.parse(jsonText.slice(start, end + 1));
-        } catch (secondParse) {
-          const pe = new Error(`模型返回的 JSON 无效：${secondParse.message}`);
-          pe.code = 'AI_JSON_PARSE_ERROR';
-          pe.details = {
-            provider: 'gemini',
-            model: this.geminiModel,
-            responsePreview: String(text || '').slice(0, 1200)
-          };
-          console.error('[AI] JSON 解析失败', pe.details);
-          throw pe;
-        }
-      }
+      const content = this._parseGeminiJsonText(text);
 
       const formatted = this.formatAIResponse(content);
       // 标题、简要描述以用户/模板输入为准，不采用模型改写结果
@@ -572,8 +621,9 @@ ${this._buildPromptOutputFormat(title, categoryInfo)}
 - 列表日期字段由系统写入，JSON 中不必包含 publishDate。
 
 【HTML 与 JSON 转义】
-- detailsHtml 内 HTML 须分行缩进；在 JSON 字符串中使用 \\n 表示换行。
-- 禁止 style 属性；禁止 <img>。
+- detailsHtml 作为 JSON 字符串时：内部所有双引号 " 必须写成 \\"；反斜杠写成 \\\\；换行用 \\n。禁止在 JSON 里放未闭合的原始换行或未转义 "，否则整段无法解析。
+- HTML 须分行缩进；在 JSON 中一律用 \\n 表示换行。
+- 禁止 style 属性；禁止 <img>；正文中勿出现三个连续反引号（Markdown 代码块标记），以免干扰解析。
 
 【输出示例】
 请直接返回 JSON，不要 markdown 代码块外的解释文字。
