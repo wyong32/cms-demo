@@ -18,7 +18,7 @@ export const UPLOAD = {
 // API超时配置（毫秒）
 export const API_TIMEOUT = {
   DEFAULT: 10000, // 10秒
-  AI_GENERATE: 60000 // 60秒
+  AI_GENERATE: 120000 // 120秒（长 HTML / 网络波动）
 }
 
 // 延迟时间配置（毫秒）

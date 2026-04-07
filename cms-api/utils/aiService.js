@@ -68,8 +68,31 @@ class AIService {
 </div>`;
 
   constructor() {
-    this.provider = process.env.AI_PROVIDER || 'mock'; // 'openai', 'claude', 'gemini', 'mock'
+    /** 默认走 Gemini；不再静默回退 mock */
+    this.provider = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
+    /**
+     * 默认 gemini-2.5-flash：相对 2.0 更聪明，比 Pro 便宜，适合长文案/结构化 JSON
+     * 可用 GEMINI_MODEL 覆盖，例如 gemini-2.5-pro
+     */
+    this.geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     this.initializeProvider();
+    console.log(
+      `[AI] provider=${this.provider}` +
+        (this.provider === 'gemini' ? ` model=${this.geminiModel}` : '')
+    );
+  }
+
+  /** 前端传 checkbox 值为字符串数组（如 ['autoSEO','autoContent']），统一成对象 */
+  normalizeGenerateOptions(options) {
+    const o = {};
+    if (Array.isArray(options)) {
+      options.forEach((k) => {
+        if (k) o[k] = true;
+      });
+    } else if (options && typeof options === 'object') {
+      Object.assign(o, options);
+    }
+    return o;
   }
 
   initializeProvider() {
@@ -84,30 +107,46 @@ class AIService {
         //   apiKey: process.env.ANTHROPIC_API_KEY
         // });
         break;
-      case 'gemini':
+      case 'gemini': {
+        const key = process.env.GOOGLE_API_KEY;
+        if (!key || !String(key).trim()) {
+          console.error('[AI] AI_PROVIDER=gemini 但未配置 GOOGLE_API_KEY，生成请求将失败');
+          this.client = null;
+          break;
+        }
         try {
-          this.client = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+          this.client = new GoogleGenerativeAI(String(key).trim());
         } catch (error) {
-          // Gemini初始化失败，回退到模拟模式
+          console.error('[AI] Gemini SDK 初始化失败:', error);
+          this.client = null;
         }
         break;
+      }
       default:
-        // 使用模拟环境
+        this.client = null;
         break;
     }
   }
 
-  // 主要的AI生成方法
+  // 主要的AI生成方法（失败直接抛错，不回退 mock）
   async generateContent({ title, description, imageUrl, iframeUrl, options = [], categoryInfo = null }) {
     switch (this.provider) {
+      case 'gemini':
+        return this.generateWithGemini({ title, description, imageUrl, iframeUrl, options, categoryInfo });
       case 'openai':
         return this.generateWithOpenAI({ title, description, imageUrl, iframeUrl, options, categoryInfo });
       case 'claude':
         return this.generateWithClaude({ title, description, imageUrl, iframeUrl, options, categoryInfo });
-      case 'gemini':
-        return this.generateWithGemini({ title, description, imageUrl, iframeUrl, options, categoryInfo });
-      default:
-        return this.generateMockContent({ title, description, imageUrl, iframeUrl, options, categoryInfo });
+      case 'mock': {
+        const e = new Error('已关闭 mock：请使用 AI_PROVIDER=gemini 并在 .env 中配置 GOOGLE_API_KEY');
+        e.code = 'MOCK_DISABLED';
+        throw e;
+      }
+      default: {
+        const e = new Error(`不支持的 AI_PROVIDER: ${this.provider}`);
+        e.code = 'UNSUPPORTED_PROVIDER';
+        throw e;
+      }
     }
   }
 
@@ -132,11 +171,10 @@ class AIService {
       // const result = JSON.parse(completion.choices[0].message.content);
       // return this.formatAIResponse(result);
 
-      // 暂时返回模拟数据
-      return this.generateMockContent({ title, description, imageUrl, iframeUrl, options });
+      throw new Error('OpenAI 集成未启用：请在 aiService 中接入 SDK 或改用 AI_PROVIDER=gemini');
     } catch (error) {
       console.error('OpenAI API调用失败:', error);
-      throw new Error('AI内容生成失败');
+      throw error;
     }
   }
 
@@ -154,149 +192,129 @@ class AIService {
       // const result = JSON.parse(message.content[0].text);
       // return this.formatAIResponse(result);
 
-      return this.generateMockContent({ title, description, imageUrl, iframeUrl, options });
+      throw new Error('Claude 集成未启用：请在 aiService 中接入 SDK 或改用 AI_PROVIDER=gemini');
     } catch (error) {
       console.error('Claude API调用失败:', error);
-      throw new Error('AI内容生成失败');
+      throw error;
     }
   }
 
-  // Gemini实现
+  // Gemini实现（无 mock / 无静默降级）
   async generateWithGemini({ title, description, imageUrl, iframeUrl, options, categoryInfo }) {
-    try {
-      if (!this.client) {
-        return this.generateMockContent({ title, description, imageUrl, iframeUrl, options, categoryInfo });
-      }
+    if (!this.client) {
+      const e = new Error(
+        '未配置 GOOGLE_API_KEY 或 Gemini 初始化失败。请在 cms-api/.env 中设置 GOOGLE_API_KEY，并确认 AI_PROVIDER=gemini'
+      );
+      e.code = 'GEMINI_NOT_CONFIGURED';
+      e.details = { provider: 'gemini', model: this.geminiModel };
+      console.error('[AI]', e.message);
+      throw e;
+    }
 
-      // 使用最新的模型
-      const model = this.client.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    try {
+      const model = this.client.getGenerativeModel({ model: this.geminiModel });
       const prompt = this.buildGeminiPrompt({ title, description, imageUrl, iframeUrl, options, categoryInfo });
 
       const result = await model.generateContent(prompt);
       const response = await result.response;
       const text = response.text();
 
-      // 尝试解析JSON响应
+      let jsonText = String(text || '').trim();
+
+      if (jsonText.includes('```json')) {
+        const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) jsonText = jsonMatch[1].trim();
+      } else if (jsonText.includes('```')) {
+        const codeMatch = jsonText.match(/```\s*([\s\S]*?)\s*```/);
+        if (codeMatch) jsonText = codeMatch[1].trim();
+      }
+
+      let content;
       try {
-        let jsonText = text;
-
-        // 如果响应被包在代码块中，提取JSON部分
-        if (text.includes('```json')) {
-          const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
-          if (jsonMatch) {
-            jsonText = jsonMatch[1];
-          }
-        } else if (text.includes('```')) {
-          const codeMatch = text.match(/```\s*([\s\S]*?)\s*```/);
-          if (codeMatch) {
-            jsonText = codeMatch[1];
-          }
+        content = JSON.parse(jsonText);
+      } catch (firstParse) {
+        const start = jsonText.indexOf('{');
+        const end = jsonText.lastIndexOf('}');
+        if (start === -1 || end <= start) {
+          const pe = new Error(
+            `模型返回内容无法解析为 JSON：${firstParse.message}。请检查提示词或换用 GEMINI_MODEL`
+          );
+          pe.code = 'AI_JSON_PARSE_ERROR';
+          pe.details = {
+            provider: 'gemini',
+            model: this.geminiModel,
+            responsePreview: String(text || '').slice(0, 1200)
+          };
+          console.error('[AI] JSON 解析失败', pe.details);
+          throw pe;
         }
-
-        const content = JSON.parse(jsonText);
-        return this.formatAIResponse(content);
-      } catch (parseError) {
-        // 如果解析失败，返回基本内容
-        return this.createFallbackResponse({ title, description, imageUrl, options, aiText: text });
+        try {
+          content = JSON.parse(jsonText.slice(start, end + 1));
+        } catch (secondParse) {
+          const pe = new Error(`模型返回的 JSON 无效：${secondParse.message}`);
+          pe.code = 'AI_JSON_PARSE_ERROR';
+          pe.details = {
+            provider: 'gemini',
+            model: this.geminiModel,
+            responsePreview: String(text || '').slice(0, 1200)
+          };
+          console.error('[AI] JSON 解析失败', pe.details);
+          throw pe;
+        }
       }
+
+      const formatted = this.formatAIResponse(content);
+      if (!formatted.detailsHtml || !String(formatted.detailsHtml).trim()) {
+        const pe = new Error('模型返回的 JSON 中缺少有效的 detailsHtml');
+        pe.code = 'AI_INCOMPLETE_RESPONSE';
+        pe.details = { provider: 'gemini', model: this.geminiModel, keys: Object.keys(content || {}) };
+        console.error('[AI]', pe.message, pe.details);
+        throw pe;
+      }
+      return formatted;
     } catch (error) {
+      if (error.code && String(error.code).startsWith('AI_')) throw error;
+      if (error.code === 'GEMINI_NOT_CONFIGURED') throw error;
+
       console.error('Gemini API调用失败:', error);
-      
-      // 检查是否是网络连接错误（fetch failed）
-      if (error.message && (
-        error.message.includes('fetch failed') || 
-        error.message.includes('ECONNREFUSED') ||
-        error.message.includes('ENOTFOUND') ||
-        error.message.includes('ETIMEDOUT') ||
-        error.message.includes('network')
-      )) {
-        // 网络错误，使用模拟数据作为降级方案
-        console.warn('AI服务网络连接失败，使用模拟数据:', error.message);
-        const mockData = this.generateMockContent({ title, description, imageUrl, iframeUrl, options, categoryInfo });
-        
-        return {
-          ...mockData,
-          _quotaWarning: {
-            code: 'NETWORK_ERROR',
-            message: 'AI服务网络连接失败，已使用模拟数据生成内容',
-            details: {
-              provider: 'gemini',
-              model: 'gemini-2.0-flash-exp',
-              error: error.message,
-              suggestion: '请检查网络连接或API密钥配置。如果使用的是本地环境，请确认已配置GOOGLE_API_KEY环境变量'
-            },
-            suggestion: '请检查网络连接和API密钥配置。如果问题持续，请联系管理员'
-          }
-        };
-      }
-      
-      // 检查是否是配额限制错误（429）
+
       if (error.status === 429 || (error.message && error.message.includes('429'))) {
-        // 提取重试延迟信息
-        let retryDelay = null;
-        if (error.errorDetails) {
-          const retryInfo = error.errorDetails.find(detail => detail['@type'] === 'type.googleapis.com/google.rpc.RetryInfo');
-          if (retryInfo && retryInfo.retryDelay) {
-            retryDelay = retryInfo.retryDelay;
-          }
-        }
-        
-        // 提取配额违规信息
-        const quotaViolations = [];
-        if (error.errorDetails) {
-          const quotaFailure = error.errorDetails.find(detail => detail['@type'] === 'type.googleapis.com/google.rpc.QuotaFailure');
-          if (quotaFailure && quotaFailure.violations) {
-            quotaViolations.push(...quotaFailure.violations);
-          }
-        }
-        
-        // 使用模拟数据作为降级方案，而不是抛出错误
-        const mockData = this.generateMockContent({ title, description, imageUrl, iframeUrl, options, categoryInfo });
-        
-        // 返回包含警告信息的结果对象
-        return {
-          ...mockData,
-          _quotaWarning: {
-            code: 'QUOTA_EXCEEDED',
-            message: 'Gemini API免费配额已用完，已使用模拟数据生成内容',
-            retryDelay: retryDelay,
-            details: {
-              provider: 'gemini',
-              model: 'gemini-2.0-flash-exp',
-              retryAfter: retryDelay,
-              helpUrl: 'https://ai.google.dev/gemini-api/docs/rate-limits',
-              usageUrl: 'https://ai.dev/usage?tab=rate-limit'
-            },
-            suggestion: '请等待配额重置（通常按分钟/小时重置）或升级到付费计划'
-          }
+        const qe = new Error(error.message || 'Gemini API 配额已满或触发限流 (429)');
+        qe.code = 'QUOTA_EXCEEDED';
+        qe.status = 429;
+        qe.details = {
+          provider: 'gemini',
+          model: this.geminiModel,
+          helpUrl: 'https://ai.google.dev/gemini-api/docs/rate-limits'
         };
+        throw qe;
       }
-      
-      // 检查是否是API密钥错误
+
       if (error.message && (error.message.includes('API_KEY') || error.message.includes('API key'))) {
-        const apiKeyError = new Error('AI服务API密钥无效');
-        apiKeyError.name = 'APIKeyError';
+        const apiKeyError = new Error('Gemini API 密钥无效或未启用 Generative Language API');
         apiKeyError.code = 'INVALID_API_KEY';
-        apiKeyError.message = 'Gemini API密钥无效或未配置，请检查环境变量GOOGLE_API_KEY';
         throw apiKeyError;
       }
-      
-      // 检查是否是权限错误
+
       if (error.status === 403 || (error.message && error.message.includes('PERMISSION_DENIED'))) {
-        const permissionError = new Error('AI服务权限被拒绝');
-        permissionError.name = 'PermissionError';
-        permissionError.status = 403;
+        const permissionError = new Error('Gemini API 权限被拒绝');
         permissionError.code = 'PERMISSION_DENIED';
-        permissionError.message = 'Gemini API权限被拒绝，请检查API密钥权限设置';
+        permissionError.status = 403;
         throw permissionError;
       }
-      
-      // 其他错误，抛出通用错误
-      const genericError = new Error('AI服务调用失败');
-      genericError.name = 'AIServiceError';
+
+      const msg =
+        error.message ||
+        (typeof error.toString === 'function' ? error.toString() : 'Gemini 调用失败');
+      const genericError = new Error(msg);
       genericError.code = 'AI_SERVICE_ERROR';
-      genericError.originalError = error;
-      genericError.message = error.message || 'AI服务调用失败，请稍后重试';
+      genericError.status = error.status;
+      genericError.originalMessage = error.message;
+      genericError.details = {
+        provider: 'gemini',
+        model: this.geminiModel,
+        stack: error.stack
+      };
       throw genericError;
     }
   }
@@ -642,6 +660,16 @@ ${this._buildPromptOutputFormat(title, categoryInfo)}
     // 为必填字段提供默认值，避免验证失败
     const title = response.title || '';
     const description = response.description || '';
+
+    let tags = response.tags;
+    if (!Array.isArray(tags)) {
+      if (typeof tags === 'string') {
+        tags = tags.split(/[,，]/).map((t) => t.trim()).filter(Boolean);
+      } else {
+        tags = [];
+      }
+    }
+    tags = tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 30);
     
     // 处理detailsHtml，确保换行符正确
     let detailsHtml = response.detailsHtml || this.generateDetailContent(title, description, description);
@@ -655,46 +683,48 @@ ${this._buildPromptOutputFormat(title, categoryInfo)}
     return {
       title: title,
       description: description,
-      tags: response.tags || [],
+      tags,
       imageAlt: response.imageAlt || null,
       seoTitle: response.seoTitle || this.generateSeoTitle(title),
       seoDescription: response.seoDescription || this.generateSeoDescription(description),
-      seoKeywords: response.seoKeywords || this.generateSeoKeywords(title, response.tags),
+      seoKeywords: response.seoKeywords || this.generateSeoKeywords(title, tags),
       addressBar: response.addressBar || this.generateAddressBar(title) || 'default-address',
       detailsHtml: detailsHtml
     };
   }
 
   // 创建备用响应（当AI返回的不是JSON格式时）
-  createFallbackResponse({ title, description, imageUrl, options, aiText }) {
-    const cleanText = aiText.replace(/[\*\#\`]/g, '').trim();
+  createFallbackResponse({ title, description, imageUrl, iframeUrl, options, categoryInfo, aiText }) {
+    const optionsObj = this.normalizeGenerateOptions(options);
+    const raw = String(aiText || '');
+    const cleanText = raw.replace(/[\*\#\`]/g, '').trim();
     const optimizedTitle = this.optimizeTitle(title);
-    // 生成简要描述（400字符以内）
-    const shortDescription = this.optimizeDescription(title, description);
+    const shortDescription = this.optimizeDescription(title, description, categoryInfo);
 
     const baseData = {
       title: optimizedTitle,
-      description: shortDescription, // 简要描述，用于表单上方
+      description: shortDescription,
       tags: this.extractEnglishKeywords(description + ' ' + cleanText),
       imageAlt: imageUrl ? `Professional screenshot of ${optimizedTitle}` : `Professional image showcasing ${optimizedTitle}`
     };
 
-    // 确保SEO字段总是生成
-    if (options.autoSEO) {
+    if (optionsObj.autoSEO) {
       baseData.seoTitle = `${optimizedTitle} - Play Free Online | Gaming Experience`;
-      baseData.seoDescription = shortDescription.length > 150 ?
-        shortDescription.substring(0, 147) + '...' :
-        shortDescription;
+      baseData.seoDescription =
+        shortDescription.length > 150 ? shortDescription.substring(0, 147) + '...' : shortDescription;
       baseData.seoKeywords = baseData.tags.join(', ');
     }
 
-    // 确保HTML内容总是生成（详细内容，用于HTML内容区域）
-    if (options.autoContent) {
-      baseData.detailsHtml = this.generateDetailContent(optimizedTitle, description, shortDescription, null);
+    if (optionsObj.autoContent) {
+      baseData.detailsHtml = this.generateDetailContent(
+        optimizedTitle,
+        description,
+        shortDescription,
+        categoryInfo
+      );
     }
 
-    // 确保地址栏总是生成
-    if (options.autoStructure) {
+    if (optionsObj.autoStructure) {
       baseData.addressBar = this.generateAddressBar(optimizedTitle);
     }
 
@@ -969,6 +999,7 @@ ${this._buildPromptOutputFormat(title, categoryInfo)}
    * 构建系统提示词 - 用于 OpenAI
    */
   buildSystemPrompt(options) {
+    const o = this.normalizeGenerateOptions(options);
     let prompt = `You are a professional content creation AI assistant. Please generate high-quality English content based on the user's input.
 
 Requirements:
@@ -984,19 +1015,19 @@ Return format:
   "tags": ["english-tag1", "english-tag2"],
   "imageAlt": "English image description",`;
 
-    if (options.autoSEO) {
+    if (o.autoSEO) {
       prompt += `
   "seoTitle": "SEO English title",
   "seoDescription": "SEO English description",
   "seoKeywords": "english keywords",`;
     }
 
-    if (options.autoContent) {
+    if (o.autoContent) {
       prompt += `
   "detailsHtml": "Detailed English HTML content",`;
     }
 
-    if (options.autoStructure) {
+    if (o.autoStructure) {
       prompt += `
   "addressBar": "url-friendly-english-address",`;
     }

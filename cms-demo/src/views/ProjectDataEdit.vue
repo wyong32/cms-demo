@@ -172,7 +172,7 @@
                   </div>
                   <el-text type="info" size="small" class="iframe-url-tip">
                     YouTube 视频请使用嵌入地址，前缀为
-                    <span>https://www.youtube.com/embed/</span>
+                     <span>https://www.youtube.com/embed/</span> 
                     ，后接视频 ID。
                   </el-text>
                 </el-form-item>
@@ -203,7 +203,7 @@
                           <img :src="getImageUrl(form.data[field.fieldName])" :alt="getFieldLabel(field)" />
                           <div class="image-overlay">
                             <el-icon class="upload-icon"><Plus /></el-icon>
-                            <span>点击更换</span>
+                            <span>点击更换</span>  
                           </div>
                         </div>
                         <div v-else class="upload-placeholder">

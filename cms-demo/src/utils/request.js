@@ -28,8 +28,8 @@ api.interceptors.request.use(
       delete config.headers['Content-Type']
     }
     
-    // 为AI生成接口设置更长的超时时间
-    if (config.url && config.url.includes('/ai/generate')) {
+    // 为 AI 生成接口设置更长的超时时间（含 generate-from-template）
+    if (config.url && /\/ai\/generate/.test(config.url)) {
       config.timeout = API_TIMEOUT.AI_GENERATE
     }
     
@@ -49,7 +49,7 @@ api.interceptors.response.use(
   (error) => {
     // 处理超时错误
     if (error.code === 'ECONNABORTED' && error.message.includes('timeout')) {
-      if (error.config && error.config.url && error.config.url.includes('/ai/generate')) {
+      if (error.config && error.config.url && /\/ai\/generate/.test(error.config.url)) {
         ElMessage.error('AI生成超时，请稍后再试或检查网络连接')
       } else {
         ElMessage.error('请求超时，请检查网络连接')

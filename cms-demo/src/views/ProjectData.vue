@@ -515,8 +515,25 @@ const handleAIError = (errorData, statusCode = null) => {
     })
     return
   }
+
+  if (statusCode === 503 || errorData.code === 'GEMINI_NOT_CONFIGURED') {
+    ElMessage({
+      message: errorData.error || 'AI 服务未正确配置',
+      type: 'error',
+      duration: 8000,
+      showClose: true
+    })
+    if (errorData.suggestion) console.error('配置说明:', errorData.suggestion)
+    if (errorData.details) console.error('[AI] details:', errorData.details)
+    return
+  }
   
-  // 其他错误
+  if (errorData.details) {
+    console.error('[AI] 错误详情', errorData.code, errorData.details)
+  }
+  if (errorData.debug?.stack) {
+    console.error('[AI] debug.stack:', errorData.debug.stack)
+  }
   const errorMessage = errorData.error || 'AI生成失败'
   const suggestion = errorData.suggestion ? `\n${errorData.suggestion}` : ''
   

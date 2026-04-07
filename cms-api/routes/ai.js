@@ -6,6 +6,67 @@ import aiService from '../utils/aiService.js';
 
 const router = express.Router();
 
+function normalizeTagsForDb(tags) {
+  if (Array.isArray(tags)) {
+    return tags.map((t) => String(t).trim()).filter(Boolean);
+  }
+  if (typeof tags === 'string') {
+    return tags.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function asDetailsHtml(val) {
+  if (val == null) return '';
+  return typeof val === 'string' ? val : String(val);
+}
+
+/** AI 生成失败时统一 HTTP 状态与 JSON，便于前端与日志排查（不再回退 mock） */
+function buildAiFailureResponse(err) {
+  const body = {
+    success: false,
+    error: err.message || 'AI 服务失败',
+    code: err.code || 'AI_SERVICE_ERROR'
+  };
+  if (err.details) body.details = err.details;
+  if (process.env.NODE_ENV === 'development' && err.stack) {
+    body.debug = { stack: err.stack };
+  }
+
+  let status = 502;
+  switch (err.code) {
+    case 'INVALID_API_KEY':
+      status = 400;
+      body.suggestion = '请检查 cms-api/.env 中的 GOOGLE_API_KEY';
+      break;
+    case 'PERMISSION_DENIED':
+      status = 403;
+      body.suggestion = '请检查 Google Cloud 中该密钥的 API 权限';
+      break;
+    case 'QUOTA_EXCEEDED':
+      status = 429;
+      body.suggestion = '配额或限流触发，请稍后重试或查看 Google AI 用量面板';
+      break;
+    case 'GEMINI_NOT_CONFIGURED':
+      status = 503;
+      body.suggestion = '在 cms-api/.env 中设置 GOOGLE_API_KEY，并确保 AI_PROVIDER=gemini';
+      break;
+    case 'MOCK_DISABLED':
+    case 'UNSUPPORTED_PROVIDER':
+      status = 500;
+      break;
+    case 'AI_JSON_PARSE_ERROR':
+    case 'AI_INCOMPLETE_RESPONSE':
+      status = 502;
+      body.suggestion = '模型返回格式异常，可尝试调整 GEMINI_MODEL 或提示词';
+      break;
+    default:
+      if (err.status === 429) status = 429;
+      break;
+  }
+  return { status, body };
+}
+
 // AI智能生成接口
 router.post('/generate', authenticateToken, requireUser, async (req, res) => {
   try {
@@ -56,10 +117,7 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
       }
     }
 
-    // 调用AI服务生成内容
     let aiGeneratedData;
-    let quotaWarning = null;
-    
     try {
       aiGeneratedData = await aiService.generateContent({
         title,
@@ -69,48 +127,10 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
         options,
         categoryInfo
       });
-      
-      // 检查是否包含配额警告（使用模拟数据）
-      if (aiGeneratedData && aiGeneratedData._quotaWarning) {
-        quotaWarning = aiGeneratedData._quotaWarning;
-        // 移除警告标记，保留数据
-        delete aiGeneratedData._quotaWarning;
-      }
     } catch (aiError) {
-      // 处理AI服务错误（非配额错误）
-      if (aiError.code === 'INVALID_API_KEY') {
-        return res.status(400).json({
-          success: false,
-          error: aiError.message,
-          code: aiError.code,
-          suggestion: '请检查环境变量GOOGLE_API_KEY是否正确配置'
-        });
-      }
-      
-      if (aiError.code === 'PERMISSION_DENIED') {
-        return res.status(403).json({
-          success: false,
-          error: aiError.message,
-          code: aiError.code,
-          suggestion: '请检查API密钥权限设置'
-        });
-      }
-      
-      // 其他AI服务错误，使用模拟数据作为降级方案
-      console.warn('AI服务调用失败，使用模拟数据:', aiError.message);
-      aiGeneratedData = aiService.generateMockContent({
-        title,
-        description,
-        imageUrl,
-        iframeUrl,
-        options,
-        categoryInfo
-      });
-      quotaWarning = {
-        code: 'AI_SERVICE_ERROR',
-        message: 'AI服务调用失败，已使用模拟数据生成内容',
-        suggestion: '请稍后重试或检查AI服务配置'
-      };
+      console.error('[AI /generate] generateContent 失败:', aiError);
+      const { status, body } = buildAiFailureResponse(aiError);
+      return res.status(status).json(body);
     }
 
     let createdItem;
@@ -132,7 +152,7 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
           categoryId,
           iframeUrl: iframeUrl || null,
           description: aiGeneratedData.description,
-          tags: aiGeneratedData.tags,
+          tags: normalizeTagsForDb(aiGeneratedData.tags),
           publishDate: new Date(),
           imageUrl: imageUrl || null,
           imageAlt: aiGeneratedData.imageAlt,
@@ -140,7 +160,7 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
           seoDescription: aiGeneratedData.seoDescription,
           seoKeywords: aiGeneratedData.seoKeywords,
           addressBar: aiGeneratedData.addressBar,
-          detailsHtml: aiGeneratedData.detailsHtml,
+          detailsHtml: asDetailsHtml(aiGeneratedData.detailsHtml),
           createdBy: req.user.id
         },
         include: {
@@ -193,8 +213,8 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
         seo_description: aiGeneratedData.seoDescription,
         seo_keywords: aiGeneratedData.seoKeywords,
         addressBar: aiGeneratedData.addressBar,
-        detailsHtml: aiGeneratedData.detailsHtml,
-        tags: aiGeneratedData.tags,
+        detailsHtml: asDetailsHtml(aiGeneratedData.detailsHtml),
+        tags: normalizeTagsForDb(aiGeneratedData.tags),
         ...customFields // 合并自定义字段
       };
       
@@ -289,16 +309,20 @@ router.post('/generate', authenticateToken, requireUser, async (req, res) => {
     res.status(201).json({
       success: true,
       message: `AI生成${type === 'template' ? '数据模板' : '项目数据'}成功`,
-      data: createdItem,
-      ...(quotaWarning && { warning: quotaWarning })
+      data: createdItem
     });
 
   } catch (error) {
     console.error('AI生成失败:', error);
-    res.status(500).json({ 
+    const payload = {
       success: false,
-      error: 'AI生成失败，请稍后重试' 
-    });
+      error: error.message || 'AI生成失败，请稍后重试',
+      code: 'SERVER_ERROR'
+    };
+    if (process.env.NODE_ENV === 'development' && error.stack) {
+      payload.debug = { stack: error.stack };
+    }
+    res.status(500).json(payload);
   }
 });
 
@@ -345,10 +369,7 @@ router.post('/generate-from-template', authenticateToken, requireUser, async (re
       }
     }
 
-    // 调用AI服务生成内容
     let aiGeneratedData;
-    let quotaWarning = null;
-    
     try {
       aiGeneratedData = await aiService.generateContent({
         title,
@@ -358,62 +379,28 @@ router.post('/generate-from-template', authenticateToken, requireUser, async (re
         options,
         categoryInfo
       });
-      
-      // 检查是否包含配额警告（使用模拟数据）
-      if (aiGeneratedData && aiGeneratedData._quotaWarning) {
-        quotaWarning = aiGeneratedData._quotaWarning;
-        // 移除警告标记，保留数据
-        delete aiGeneratedData._quotaWarning;
-      }
     } catch (aiError) {
-      // 处理AI服务错误（非配额错误）
-      if (aiError.code === 'INVALID_API_KEY') {
-        return res.status(400).json({
-          success: false,
-          error: aiError.message,
-          code: aiError.code,
-          suggestion: '请检查环境变量GOOGLE_API_KEY是否正确配置'
-        });
-      }
-      
-      if (aiError.code === 'PERMISSION_DENIED') {
-        return res.status(403).json({
-          success: false,
-          error: aiError.message,
-          code: aiError.code,
-          suggestion: '请检查API密钥权限设置'
-        });
-      }
-      
-      // 其他AI服务错误，使用模拟数据作为降级方案
-      console.warn('AI服务调用失败，使用模拟数据:', aiError.message);
-      aiGeneratedData = aiService.generateMockContent({
-        title,
-        description,
-        imageUrl,
-        iframeUrl,
-        options,
-        categoryInfo
-      });
-      quotaWarning = {
-        code: 'AI_SERVICE_ERROR',
-        message: 'AI服务调用失败，已使用模拟数据生成内容',
-        suggestion: '请稍后重试或检查AI服务配置'
-      };
+      console.error('[AI /generate-from-template] generateContent 失败:', aiError);
+      const { status, body } = buildAiFailureResponse(aiError);
+      return res.status(status).json(body);
     }
 
     res.json({
       success: true,
-      data: aiGeneratedData,
-      ...(quotaWarning && { warning: quotaWarning })
+      data: aiGeneratedData
     });
 
   } catch (error) {
     console.error('从模板AI生成失败:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: '从模板AI生成失败' 
-    });
+    const payload = {
+      success: false,
+      error: error.message || '从模板AI生成失败',
+      code: 'SERVER_ERROR'
+    };
+    if (process.env.NODE_ENV === 'development' && error.stack) {
+      payload.debug = { stack: error.stack };
+    }
+    res.status(500).json(payload);
   }
 });
 
