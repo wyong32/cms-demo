@@ -113,6 +113,8 @@ Content-Type: application/json
 }
 ```
 
+手动创建/更新模板接口使用上述扁平 SEO 字段。AI 接口（`/api/ai/generate`、`/api/ai/generate-from-template`）提示模型返回嵌套 `seo: { "title", "description", "keywords" }`，与项目数据导出代码中的 `seo: { ... }` 一致；服务端解析后仍写入 `seoTitle` / `seoDescription` / `seoKeywords`。
+
 ## 项目管理 (/api/projects)
 
 ### 获取所有项目

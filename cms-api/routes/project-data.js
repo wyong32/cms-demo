@@ -21,6 +21,7 @@ function escapeForTemplateLiteral(str) {
 
 /** 生成代码时合并为 seo:{ title, description, keywords }（库内仍用 seo_title 等存储） */
 const SEO_SOURCE_FIELD_NAMES = new Set([
+  'seo',
   'seo_title',
   'seo_description',
   'seo_keywords',
@@ -36,6 +37,32 @@ function pickFirstDataValue(data, keys) {
   return '';
 }
 
+/** 与 AI 返回的 seo:{title,description,keywords} 及扁平 seo_* 字段对齐 */
+function pickSeoFromData(data) {
+  const nested = data?.seo;
+  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    const t = nested.title ?? nested.Title;
+    const d = nested.description ?? nested.Description;
+    const k = nested.keywords ?? nested.Keywords;
+    return {
+      title: t != null && String(t).trim() !== '' ? String(t) : pickFirstDataValue(data, ['seo_title', 'seoTitle']),
+      description:
+        d != null && String(d).trim() !== ''
+          ? String(d)
+          : pickFirstDataValue(data, ['seo_description', 'seoDescription']),
+      keywords:
+        k != null && String(k).trim() !== ''
+          ? String(k)
+          : pickFirstDataValue(data, ['seo_keywords', 'seoKeywords'])
+    };
+  }
+  return {
+    title: pickFirstDataValue(data, ['seo_title', 'seoTitle']),
+    description: pickFirstDataValue(data, ['seo_description', 'seoDescription']),
+    keywords: pickFirstDataValue(data, ['seo_keywords', 'seoKeywords'])
+  };
+}
+
 function formatJsStringOrTemplate(value) {
   const s = value === undefined || value === null ? '' : String(value);
   if (/[\r\n]/.test(s)) {
@@ -48,9 +75,7 @@ function buildNestedSeoJsBlock(projectFields, data) {
   const hasSeoInProject = projectFields.some((f) => SEO_SOURCE_FIELD_NAMES.has(f.fieldName));
   if (!hasSeoInProject) return '';
 
-  const title = pickFirstDataValue(data, ['seo_title', 'seoTitle']);
-  const description = pickFirstDataValue(data, ['seo_description', 'seoDescription']);
-  const keywords = pickFirstDataValue(data, ['seo_keywords', 'seoKeywords']);
+  const { title, description, keywords } = pickSeoFromData(data);
 
   const t = formatJsStringOrTemplate(title);
   const d = formatJsStringOrTemplate(description);
